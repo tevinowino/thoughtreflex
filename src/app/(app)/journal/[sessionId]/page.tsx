@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import { getTherapistResponse, TherapistModeInput } from '@/ai/flows/therapist-modes';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, addDoc, collection, query, orderBy, onSnapshot, serverTimestamp, Timestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, addDoc, collection, query, orderBy, onSnapshot, serverTimestamp, Timestamp, setDoc, where, getDocs, limit } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 
 
@@ -23,7 +23,7 @@ interface Message {
   text: string;
   sender: 'user' | 'ai';
   timestamp: Timestamp | Date; // Store as Timestamp, use as Date
-  avatar?: string;
+  avatar?: string | null; // Allow null for avatar
   name: string;
 }
 
@@ -117,7 +117,7 @@ export default function JournalSessionPage() {
       sender: 'user',
       timestamp: serverTimestamp() as unknown as Timestamp, // Firestore will convert this
       name: user.displayName || 'User',
-      avatar: user.photoURL || undefined,
+      avatar: user.photoURL || null, // Changed undefined to null
     };
 
     setIsLoadingAiResponse(true);
@@ -244,7 +244,7 @@ export default function JournalSessionPage() {
             )}
           >
             <Avatar className="h-8 w-8">
-              <AvatarImage src={msg.avatar} data-ai-hint={msg.sender === 'user' ? 'profile user' : 'ai bot'} />
+              <AvatarImage src={msg.avatar || undefined} data-ai-hint={msg.sender === 'user' ? 'profile user' : 'ai bot'} />
               <AvatarFallback>
                 {msg.sender === 'user' ? <User className="h-4 w-4" /> : <Brain className="h-4 w-4" />}
               </AvatarFallback>
@@ -313,3 +313,5 @@ export default function JournalSessionPage() {
     </div>
   );
 }
+
+    
