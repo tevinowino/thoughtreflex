@@ -23,7 +23,7 @@ interface Message {
   text: string;
   sender: 'user' | 'ai';
   timestamp: Timestamp | Date; // Store as Timestamp, use as Date
-  avatar?: string | null; // Allow null for avatar
+  avatar?: string | null; 
   name: string;
 }
 
@@ -100,8 +100,9 @@ export default function JournalSessionPage() {
   }, [initialSessionId, user, authLoading, router, toast]);
 
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
+    const viewport = scrollAreaRef.current?.querySelector<HTMLDivElement>('[data-radix-scroll-area-viewport]');
+    if (viewport) {
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
     }
   }, [messages]);
 
@@ -117,7 +118,7 @@ export default function JournalSessionPage() {
       sender: 'user',
       timestamp: serverTimestamp() as unknown as Timestamp, // Firestore will convert this
       name: user.displayName || 'User',
-      avatar: user.photoURL || null, // Changed undefined to null
+      avatar: user.photoURL || null,
     };
 
     setIsLoadingAiResponse(true);
@@ -313,5 +314,3 @@ export default function JournalSessionPage() {
     </div>
   );
 }
-
-    
