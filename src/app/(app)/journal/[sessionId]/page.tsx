@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2 } from 'lucide-react';
+import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,6 +16,7 @@ import { getTherapistResponse, TherapistModeInput } from '@/ai/flows/therapist-m
 import { db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, addDoc, collection, query, orderBy, onSnapshot, serverTimestamp, Timestamp, setDoc, where, getDocs, limit } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import Link from 'next/link';
 
 
 interface Message {
@@ -23,7 +24,7 @@ interface Message {
   text: string;
   sender: 'user' | 'ai';
   timestamp: Timestamp | Date; // Store as Timestamp, use as Date
-  avatar?: string | null; 
+  avatar?: string | null;
   name: string;
 }
 
@@ -34,7 +35,7 @@ export default function JournalSessionPage() {
   const router = useRouter();
   const { toast } = useToast();
   const initialSessionId = params.sessionId as string;
-  
+
   const { user, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -51,7 +52,7 @@ export default function JournalSessionPage() {
       setCurrentTherapistMode(user.defaultTherapistMode);
     }
   }, [user?.defaultTherapistMode]);
-  
+
   useEffect(() => {
     if (!user || authLoading) return;
 
@@ -66,7 +67,7 @@ export default function JournalSessionPage() {
       setIsLoadingSession(true);
       setCurrentDbSessionId(initialSessionId);
       const sessionDocRef = doc(db, 'users', user.uid, 'journalSessions', initialSessionId);
-      
+
       getDoc(sessionDocRef).then(docSnap => {
         if (docSnap.exists()) {
           setSessionTitle(docSnap.data().title || `Session from ${(docSnap.data().createdAt.toDate() as Date).toLocaleDateString()}`);
@@ -161,13 +162,13 @@ export default function JournalSessionPage() {
               activeGoalText = goalsSnapshot.docs[0].data().text;
           }
       }
-      
-      const aiFlowInput: TherapistModeInput = { 
-        userInput: userMessageText, 
+
+      const aiFlowInput: TherapistModeInput = {
+        userInput: userMessageText,
         mode: currentTherapistMode,
         goal: activeGoalText
       };
-      
+
       const aiResponse = await getTherapistResponse(aiFlowInput);
 
       const aiMessageData: Omit<Message, 'id'> = {
@@ -178,7 +179,7 @@ export default function JournalSessionPage() {
         avatar: '/logo-ai.png',
       };
       await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), aiMessageData);
-      
+
       // Update session's lastUpdatedAt
       await updateDoc(doc(db, 'users', user.uid, 'journalSessions', actualSessionId!), {
         lastUpdatedAt: serverTimestamp()
@@ -188,13 +189,13 @@ export default function JournalSessionPage() {
       console.error("Error sending message or getting AI response:", error);
       toast({ title: "Error", description: error.message || "Could not process message.", variant: "destructive" });
       // Restore input if send failed
-      setInput(userMessageText); 
+      setInput(userMessageText);
       setMessages(prev => prev.filter(m => m.id !== tempUserMessageId)); // Remove temp message
     } finally {
       setIsLoadingAiResponse(false);
     }
   };
-  
+
   const modeIcons = {
     Therapist: <Brain className="mr-2 h-4 w-4" />,
     Coach: <Zap className="mr-2 h-4 w-4" />,
@@ -213,7 +214,15 @@ export default function JournalSessionPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-theme(spacing.32))] md:h-[calc(100vh-theme(spacing.24))] bg-card rounded-2xl shadow-xl overflow-hidden">
       <CardHeader className="flex flex-row items-center justify-between p-4 border-b">
-        <CardTitle className="text-xl truncate">{sessionTitle}</CardTitle>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/journal">
+              <ArrowLeft className="h-5 w-5" />
+              <span className="sr-only">Back to Journals</span>
+            </Link>
+          </Button>
+          <CardTitle className="text-xl truncate">{sessionTitle}</CardTitle>
+        </div>
         <div className="flex items-center gap-2">
           <Select value={currentTherapistMode} onValueChange={(value: TherapistMode) => setCurrentTherapistMode(value)}>
             <SelectTrigger className="w-[150px] h-9">
@@ -314,5 +323,3 @@ export default function JournalSessionPage() {
     </div>
   );
 }
-
-    
