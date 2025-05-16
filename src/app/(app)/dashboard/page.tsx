@@ -1,13 +1,97 @@
+
 'use client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/auth-context';
-import { BookText, Target, Sparkles, CalendarCheck, Edit3 } from 'lucide-react';
+import { BookText, Target, Sparkles, CalendarCheck, Edit3, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useEffect, useState } from 'react';
+import { db } from '@/lib/firebase';
+import { collection, query, orderBy, limit, onSnapshot, where, Timestamp } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+
+interface RecentJournal {
+  id: string;
+  title: string;
+  lastUpdatedAt: Date;
+}
+
+interface GoalSummary {
+  id: string;
+  text: string;
+  isCompleted: boolean;
+}
+
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const [recentJournals, setRecentJournals] = useState<RecentJournal[]>([]);
+  const [activeGoals, setActiveGoals] = useState<GoalSummary[]>([]);
+  const [loadingJournals, setLoadingJournals] = useState(true);
+  const [loadingGoals, setLoadingGoals] = useState(true);
+  // Placeholder for weekly recap, true if available
+  const [isRecapAvailable, setIsRecapAvailable] = useState(false); 
+
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Fetch Recent Journals
+    setLoadingJournals(true);
+    const journalsQuery = query(
+      collection(db, 'users', user.uid, 'journalSessions'),
+      orderBy('lastUpdatedAt', 'desc'),
+      limit(3)
+    );
+    const unsubscribeJournals = onSnapshot(journalsQuery, (snapshot) => {
+      const fetchedJournals = snapshot.docs.map(doc => ({
+        id: doc.id,
+        title: doc.data().title || `Session from ${(doc.data().createdAt.toDate() as Date).toLocaleDateString()}`,
+        lastUpdatedAt: (doc.data().lastUpdatedAt as Timestamp).toDate(),
+      }));
+      setRecentJournals(fetchedJournals);
+      setLoadingJournals(false);
+    }, (error) => {
+      console.error("Error fetching recent journals:", error);
+      toast({ title: "Error", description: "Could not load recent journals.", variant: "destructive" });
+      setLoadingJournals(false);
+    });
+
+    // Fetch Active Goals
+    setLoadingGoals(true);
+    const goalsQuery = query(
+      collection(db, 'users', user.uid, 'goals'),
+      where('isCompleted', '==', false),
+      orderBy('createdAt', 'desc'),
+      limit(3) // Show a few active goals
+    );
+    const unsubscribeGoals = onSnapshot(goalsQuery, (snapshot) => {
+      const fetchedGoals = snapshot.docs.map(doc => ({
+        id: doc.id,
+        text: doc.data().text,
+        isCompleted: doc.data().isCompleted,
+      }));
+      setActiveGoals(fetchedGoals);
+      setLoadingGoals(false);
+    }, (error) => {
+      console.error("Error fetching active goals:", error);
+      toast({ title: "Error", description: "Could not load active goals.", variant: "destructive" });
+      setLoadingGoals(false);
+    });
+    
+    // Mock check for weekly recap availability
+    // In a real app, query Firestore for the latest recap for the user
+    setIsRecapAvailable(Math.random() > 0.5);
+
+
+    return () => {
+      unsubscribeJournals();
+      unsubscribeGoals();
+    };
+  }, [user, toast]);
+
 
   return (
     <div className="space-y-8">
@@ -35,8 +119,26 @@ export default function DashboardPage() {
             <CardDescription>Continue your reflections or start a new entry.</CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Placeholder for recent journal entries */}
-            <p className="text-sm text-muted-foreground">No recent journal entries found.</p>
+            {loadingJournals ? (
+              <div className="flex items-center justify-center h-20">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : recentJournals.length > 0 ? (
+              <ul className="space-y-2">
+                {recentJournals.map(journal => (
+                  <li key={journal.id} className="text-sm hover:bg-muted/50 p-2 rounded-md">
+                    <Link href={`/journal/${journal.id}`} className="block text-primary hover:underline truncate">
+                      {journal.title}
+                    </Link>
+                    <p className="text-xs text-muted-foreground">
+                      Last entry: {journal.lastUpdatedAt.toLocaleDateString()}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No recent journal entries found.</p>
+            )}
             <Button variant="link" asChild className="px-0 mt-2">
               <Link href="/journal">View All Journals</Link>
             </Button>
@@ -47,13 +149,26 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="h-6 w-6 text-primary" />
-              Your Goals
+              Your Active Goals
             </CardTitle>
             <CardDescription>Track your progress towards emotional well-being.</CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Placeholder for goals */}
-            <p className="text-sm text-muted-foreground">You haven't set any goals yet.</p>
+             {loadingGoals ? (
+              <div className="flex items-center justify-center h-20">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : activeGoals.length > 0 ? (
+              <ul className="space-y-2">
+                {activeGoals.map(goal => (
+                  <li key={goal.id} className="text-sm text-foreground truncate p-1">
+                    {goal.text}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">You haven't set any active goals yet.</p>
+            )}
             <Button variant="link" asChild className="px-0 mt-2">
               <Link href="/goals">Manage Goals</Link>
             </Button>
@@ -66,11 +181,14 @@ export default function DashboardPage() {
               <CalendarCheck className="h-6 w-6 text-primary" />
               Weekly Recap
             </CardTitle>
-            <CardDescription>Review your emotional trends and victories from last week.</CardDescription>
+            <CardDescription>Review your emotional trends and victories.</CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Placeholder for weekly recap */}
-            <p className="text-sm text-muted-foreground">Your weekly recap is not yet available.</p>
+            {isRecapAvailable ? (
+                 <p className="text-sm text-foreground">Your latest weekly recap is ready!</p>
+            ) : (
+                 <p className="text-sm text-muted-foreground">Your weekly recap is not yet available.</p>
+            )}
             <Button variant="link" asChild className="px-0 mt-2">
               <Link href="/recaps">View Recaps</Link>
             </Button>
@@ -108,7 +226,6 @@ export default function DashboardPage() {
           </div>
         </CardContent>
       </Card>
-
     </div>
   );
 }

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -17,12 +18,13 @@ import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
 
 const formSchema = z.object({
+  displayName: z.string().min(2, { message: 'Display name must be at least 2 characters.'}),
   email: z.string().email({ message: 'Invalid email address.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   confirmPassword: z.string(),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords don't match",
-  path: ["confirmPassword"], // path of error
+  path: ["confirmPassword"], 
 });
 
 export function SignupForm() {
@@ -32,6 +34,7 @@ export function SignupForm() {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      displayName: '',
       email: '',
       password: '',
       confirmPassword: '',
@@ -40,12 +43,12 @@ export function SignupForm() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
-      await signUpWithEmail(values.email, values.password);
+      await signUpWithEmail(values.email, values.password, values.displayName);
       // Successful signup is handled by AuthProvider redirect
-    } catch (e) {
+    } catch (e: any) {
       toast({
         title: 'Signup Failed',
-        description: error?.message || 'An unexpected error occurred.',
+        description: e.message || error?.message || 'An unexpected error occurred.',
         variant: 'destructive',
       });
     }
@@ -54,6 +57,19 @@ export function SignupForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <FormField
+          control={form.control}
+          name="displayName"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Display Name</FormLabel>
+              <FormControl>
+                <Input placeholder="Your Name" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
         <FormField
           control={form.control}
           name="email"
@@ -93,7 +109,7 @@ export function SignupForm() {
             </FormItem>
           )}
         />
-        {error && <p className="text-sm font-medium text-destructive">{error.message}</p>}
+        {error && !form.formState.isValid && <p className="text-sm font-medium text-destructive">{error.message}</p>}
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? 'Creating Account...' : 'Create Account'}
         </Button>

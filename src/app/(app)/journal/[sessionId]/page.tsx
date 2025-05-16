@@ -1,72 +1,104 @@
+
 'use client';
 
 import { useState, useEffect, useRef, FormEvent } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User } from 'lucide-react';
+import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-// import { getTherapistResponse, TherapistModeInput } from '@/ai/flows/therapist-modes'; // This will be used when server actions are set up
-// import { doc, getDoc, updateDoc, arrayUnion, Timestamp, setDoc, collection } from 'firebase/firestore';
-// import { db } from '@/lib/firebase';
+import { getTherapistResponse, TherapistModeInput } from '@/ai/flows/therapist-modes';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, updateDoc, addDoc, collection, query, orderBy, onSnapshot, serverTimestamp, Timestamp, setDoc } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+
 
 interface Message {
   id: string;
   text: string;
   sender: 'user' | 'ai';
-  timestamp: Date;
+  timestamp: Timestamp | Date; // Store as Timestamp, use as Date
   avatar?: string;
   name: string;
 }
 
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
 
-
 export default function JournalSessionPage() {
   const params = useParams();
-  const sessionId = params.sessionId as string;
-  const { user } = useAuth();
+  const router = useRouter();
+  const { toast } = useToast();
+  const initialSessionId = params.sessionId as string;
+  
+  const { user, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sessionTitle, setSessionTitle] = useState('Loading session...');
   const [isLoadingAiResponse, setIsLoadingAiResponse] = useState(false);
+  const [isLoadingSession, setIsLoadingSession] = useState(true);
   const [currentTherapistMode, setCurrentTherapistMode] = useState<TherapistMode>('Therapist');
+  const [currentDbSessionId, setCurrentDbSessionId] = useState<string | null>(initialSessionId === 'new' ? null : initialSessionId);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  // Mock function to get initials
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return 'U';
-    const names = name.split(' ');
-    return names.map(n => n[0]).join('').toUpperCase().substring(0,2);
-  };
-  
-  // Effect to load session data (mocked for now)
   useEffect(() => {
-    if (sessionId === 'new') {
+    if (user?.defaultTherapistMode) {
+      setCurrentTherapistMode(user.defaultTherapistMode);
+    }
+  }, [user?.defaultTherapistMode]);
+  
+  useEffect(() => {
+    if (!user || authLoading) return;
+
+    if (initialSessionId === 'new') {
       setSessionTitle('New Journal Session');
       setMessages([
         { id: '0', text: "Welcome! I'm here to listen. What's on your mind today?", sender: 'ai', timestamp: new Date(), name: 'ThoughtReflex AI', avatar: '/logo-ai.png' },
       ]);
+      setIsLoadingSession(false);
+      setCurrentDbSessionId(null); // Explicitly set to null for new sessions
     } else {
-      // In a real app, fetch from Firestore
-      setSessionTitle(`Session ${sessionId}`);
-      // Mock messages
-      setMessages([
-        { id: '0', text: "Welcome back! Let's continue where we left off.", sender: 'ai', timestamp: new Date(), name: 'ThoughtReflex AI', avatar: '/logo-ai.png' },
-        { id: '1', text: "I was thinking about what we discussed yesterday...", sender: 'user', timestamp: new Date(Date.now() - 100000), name: user?.displayName || 'User', avatar: user?.photoURL || undefined },
-        { id: '2', text: "That's a good starting point. Tell me more about those thoughts.", sender: 'ai', timestamp: new Date(Date.now() - 50000), name: 'ThoughtReflex AI', avatar: '/logo-ai.png' },
-      ]);
-    }
-  }, [sessionId, user]);
+      setIsLoadingSession(true);
+      setCurrentDbSessionId(initialSessionId);
+      const sessionDocRef = doc(db, 'users', user.uid, 'journalSessions', initialSessionId);
+      
+      getDoc(sessionDocRef).then(docSnap => {
+        if (docSnap.exists()) {
+          setSessionTitle(docSnap.data().title || `Session from ${(docSnap.data().createdAt.toDate() as Date).toLocaleDateString()}`);
+        } else {
+          toast({ title: "Error", description: "Session not found.", variant: "destructive" });
+          router.push('/journal');
+        }
+      }).catch(error => {
+        console.error("Error fetching session details:", error);
+        toast({ title: "Error", description: "Could not load session details.", variant: "destructive" });
+      });
 
-  // Scroll to bottom when new messages are added
+      const messagesColRef = collection(db, 'users', user.uid, 'journalSessions', initialSessionId, 'messages');
+      const q = query(messagesColRef, orderBy('timestamp', 'asc'));
+
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const fetchedMessages = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          timestamp: doc.data().timestamp?.toDate ? doc.data().timestamp.toDate() : new Date(),
+        } as Message));
+        setMessages(fetchedMessages);
+        setIsLoadingSession(false);
+      }, (error) => {
+        console.error("Error fetching messages:", error);
+        toast({ title: "Error", description: "Could not load messages.", variant: "destructive" });
+        setIsLoadingSession(false);
+      });
+      return () => unsubscribe();
+    }
+  }, [initialSessionId, user, authLoading, router, toast]);
+
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
@@ -77,47 +109,89 @@ export default function JournalSessionPage() {
     e.preventDefault();
     if (!input.trim() || !user) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: input,
+    const userMessageText = input;
+    setInput(''); // Clear input immediately
+
+    const userMessageData: Omit<Message, 'id'> = {
+      text: userMessageText,
       sender: 'user',
-      timestamp: new Date(),
+      timestamp: serverTimestamp() as unknown as Timestamp, // Firestore will convert this
       name: user.displayName || 'User',
       avatar: user.photoURL || undefined,
     };
-    setMessages(prev => [...prev, userMessage]);
-    setInput('');
+
     setIsLoadingAiResponse(true);
+    let tempUserMessageId = Date.now().toString();
+    setMessages(prev => [...prev, { ...userMessageData, id: tempUserMessageId, timestamp: new Date() } as Message]);
 
-    // Simulate AI response (replace with actual API call via Server Action)
-    // const aiFlowInput: TherapistModeInput = { userInput: input, mode: currentTherapistMode };
-    // const aiResponse = await getTherapistResponse(aiFlowInput); // This would be a server action call
 
-    // Mock AI response
-    setTimeout(() => {
-      let aiText = "I'm processing that...";
-      if (currentTherapistMode === 'Therapist') {
-        aiText = `That's an interesting point, ${user.displayName?.split(' ')[0]}. Could you elaborate on what "${input.substring(0,15)}..." means to you in this context?`;
-      } else if (currentTherapistMode === 'Coach') {
-        aiText = `Okay, ${user.displayName?.split(' ')[0]}, thanks for sharing that. How does this relate to your goal of [example goal]? What's one action step you can take?`;
-      } else { // Friend
-        aiText = `Gotcha, ${user.displayName?.split(' ')[0]}. I hear you. It sounds like you're going through a lot with "${input.substring(0,15)}...". Want to talk more about it or just vent?`;
+    try {
+      let actualSessionId = currentDbSessionId;
+
+      // Create new session if it's the first message
+      if (!actualSessionId) {
+        const sessionColRef = collection(db, 'users', user.uid, 'journalSessions');
+        const newSessionDoc = await addDoc(sessionColRef, {
+          title: `Journal - ${new Date().toLocaleDateString()}`,
+          createdAt: serverTimestamp(),
+          lastUpdatedAt: serverTimestamp(),
+          userId: user.uid,
+          firstMessagePreview: userMessageText.substring(0, 100),
+        });
+        actualSessionId = newSessionDoc.id;
+        setCurrentDbSessionId(actualSessionId);
+        router.replace(`/journal/${actualSessionId}`, { scroll: false });
+        setSessionTitle(`Journal - ${new Date().toLocaleDateString()}`);
       }
 
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: aiText,
-        sender: 'ai',
-        timestamp: new Date(),
-        name: 'ThoughtReflex AI',
-        avatar: '/logo-ai.png', // Placeholder AI avatar
-      };
-      setMessages(prev => [...prev, aiMessage]);
-      setIsLoadingAiResponse(false);
-    }, 1500);
+      // Save user message
+      const userMsgRef = await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), userMessageData);
+      // Update visual message with actual ID if needed (optional, onSnapshot should handle)
+      setMessages(prev => prev.map(m => m.id === tempUserMessageId ? {...m, id: userMsgRef.id} : m));
 
-    // Firestore logic would go here (saving userMessage and aiMessage)
-    // if (sessionId === 'new') { ... create new session ... } else { ... update existing session ... }
+
+      // Prepare AI Flow Input
+      // Fetch user's active goals for coach mode
+      let activeGoalText: string | undefined = undefined;
+      if (currentTherapistMode === 'Coach') {
+          const goalsQuery = query(collection(db, 'users', user.uid, 'goals'), where('isCompleted', '==', false), orderBy('createdAt', 'desc'), limit(1));
+          const goalsSnapshot = await getDocs(goalsQuery);
+          if (!goalsSnapshot.empty) {
+              activeGoalText = goalsSnapshot.docs[0].data().text;
+          }
+      }
+      
+      const aiFlowInput: TherapistModeInput = { 
+        userInput: userMessageText, 
+        mode: currentTherapistMode,
+        goal: activeGoalText
+      };
+      
+      const aiResponse = await getTherapistResponse(aiFlowInput);
+
+      const aiMessageData: Omit<Message, 'id'> = {
+        text: aiResponse.response,
+        sender: 'ai',
+        timestamp: serverTimestamp() as unknown as Timestamp,
+        name: 'ThoughtReflex AI',
+        avatar: '/logo-ai.png',
+      };
+      await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), aiMessageData);
+      
+      // Update session's lastUpdatedAt
+      await updateDoc(doc(db, 'users', user.uid, 'journalSessions', actualSessionId!), {
+        lastUpdatedAt: serverTimestamp()
+      });
+
+    } catch (error: any) {
+      console.error("Error sending message or getting AI response:", error);
+      toast({ title: "Error", description: error.message || "Could not process message.", variant: "destructive" });
+      // Restore input if send failed
+      setInput(userMessageText); 
+      setMessages(prev => prev.filter(m => m.id !== tempUserMessageId)); // Remove temp message
+    } finally {
+      setIsLoadingAiResponse(false);
+    }
   };
   
   const modeIcons = {
@@ -125,6 +199,15 @@ export default function JournalSessionPage() {
     Coach: <Zap className="mr-2 h-4 w-4" />,
     Friend: <Smile className="mr-2 h-4 w-4" />,
   };
+
+  if (authLoading || isLoadingSession && initialSessionId !== 'new') {
+     return (
+      <div className="flex flex-col h-[calc(100vh-theme(spacing.32))] md:h-[calc(100vh-theme(spacing.24))] bg-card rounded-2xl shadow-xl overflow-hidden items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="mt-4 text-muted-foreground">Loading session...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-theme(spacing.32))] md:h-[calc(100vh-theme(spacing.24))] bg-card rounded-2xl shadow-xl overflow-hidden">
@@ -144,7 +227,7 @@ export default function JournalSessionPage() {
               <SelectItem value="Friend"><div className="flex items-center"><Smile className="mr-2 h-4 w-4" /> Friend</div></SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" onClick={() => toast({title: "Not Implemented", description: "Session settings are not yet available."})}>
             <Settings2 className="h-5 w-5" />
             <span className="sr-only">Session Settings</span>
           </Button>
@@ -179,7 +262,7 @@ export default function JournalSessionPage() {
                   "text-xs mt-1",
                   msg.sender === 'user' ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground/70 text-left'
                 )}>
-                {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {(msg.timestamp instanceof Date ? msg.timestamp : new Date((msg.timestamp as Timestamp).seconds * 1000)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
           </div>
@@ -212,11 +295,11 @@ export default function JournalSessionPage() {
             }}
           />
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-            <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-primary">
+            <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-primary" onClick={() => toast({title: "Not Implemented", description:"Voice input coming soon!"})}>
               <Mic className="h-5 w-5" />
               <span className="sr-only">Voice Input</span>
             </Button>
-            <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-primary">
+            <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-primary" onClick={() => toast({title: "Not Implemented", description:"File attachment coming soon!"})}>
               <Paperclip className="h-5 w-5" />
               <span className="sr-only">Attach File</span>
             </Button>

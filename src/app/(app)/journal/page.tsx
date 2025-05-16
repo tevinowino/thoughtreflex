@@ -1,29 +1,67 @@
+
 'use client';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, BookOpen } from 'lucide-react';
+import { PlusCircle, BookOpen, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useAuth } from '@/contexts/auth-context';
+import { db } from '@/lib/firebase';
+import { collection, query, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { useToast } from '@/hooks/use-toast';
 
-// Placeholder for session data structure
 interface JournalSession {
   id: string;
   title: string;
-  date: string;
-  excerpt: string;
+  createdAt: Timestamp | Date;
+  lastUpdatedAt: Timestamp | Date;
+  firstMessagePreview?: string; // Optional: store first few words of first message
+  userId: string;
 }
 
-const mockSessions: JournalSession[] = [
-  { id: '1', title: 'Reflections on a Busy Week', date: 'October 26, 2023', excerpt: 'Felt a bit overwhelmed today but managed to...' },
-  { id: '2', title: 'Morning Thoughts', date: 'October 25, 2023', excerpt: 'Woke up feeling grateful for the small things...' },
-  { id: '3', title: 'Processing Difficult Emotions', date: 'October 23, 2023', excerpt: 'Today was challenging. I explored feelings of...' },
-];
-
-
 export default function JournalPage() {
-  // In a real app, fetch sessions from Firestore
-  const sessions = mockSessions; // Using mock data for now
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [sessions, setSessions] = useState<JournalSession[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    const sessionsColRef = collection(db, 'users', user.uid, 'journalSessions');
+    const q = query(sessionsColRef, orderBy('lastUpdatedAt', 'desc'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedSessions = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate() : new Date(),
+        lastUpdatedAt: doc.data().lastUpdatedAt?.toDate ? doc.data().lastUpdatedAt.toDate() : new Date(),
+      } as JournalSession));
+      setSessions(fetchedSessions);
+      setIsLoading(false);
+    }, (error) => {
+      console.error("Error fetching journal sessions:", error);
+      toast({ title: "Error", description: "Could not fetch journal sessions.", variant: "destructive" });
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user, toast]);
+
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -61,11 +99,13 @@ export default function JournalPage() {
           {sessions.map(session => (
             <Card key={session.id} className="shadow-lg hover:shadow-xl transition-shadow rounded-2xl flex flex-col">
               <CardHeader>
-                <CardTitle className="text-xl">{session.title}</CardTitle>
-                <CardDescription>{session.date}</CardDescription>
+                <CardTitle className="text-xl">{session.title || `Session from ${ (session.createdAt instanceof Date ? session.createdAt : new Date((session.createdAt as Timestamp).seconds * 1000)).toLocaleDateString()}`}</CardTitle>
+                <CardDescription>
+                  Last entry: { (session.lastUpdatedAt instanceof Date ? session.lastUpdatedAt : new Date((session.lastUpdatedAt as Timestamp).seconds * 1000)).toLocaleDateString() }
+                </CardDescription>
               </CardHeader>
               <CardContent className="flex-grow">
-                <p className="text-sm text-foreground/80 line-clamp-3">{session.excerpt}</p>
+                <p className="text-sm text-foreground/80 line-clamp-3">{session.firstMessagePreview || 'No preview available.'}</p>
               </CardContent>
               <div className="p-6 pt-0">
                 <Button variant="outline" asChild className="w-full">

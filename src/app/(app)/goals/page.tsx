@@ -1,11 +1,12 @@
+
 'use client';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { PlusCircle, Target, Edit2, Trash2 } from 'lucide-react';
-import { useState, FormEvent } from 'react';
+import { PlusCircle, Target, Edit2, Trash2, Loader2 } from 'lucide-react';
+import { useState, FormEvent, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -13,55 +14,112 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import Image from 'next/image';
+import { useAuth } from '@/contexts/auth-context';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, serverTimestamp, query, where, onSnapshot, doc, updateDoc, deleteDoc, orderBy, Timestamp } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
 
 interface Goal {
   id: string;
   text: string;
   isCompleted: boolean;
-  createdAt: Date;
+  createdAt: Timestamp | Date; // Store as Timestamp, display as Date
+  userId: string;
 }
 
 export default function GoalsPage() {
-  const [goals, setGoals] = useState<Goal[]>([
-    { id: '1', text: 'Overcome fear of rejection in social situations', isCompleted: false, createdAt: new Date(Date.now() - 86400000 * 5) },
-    { id: '2', text: 'Practice mindfulness for 10 minutes daily', isCompleted: true, createdAt: new Date(Date.now() - 86400000 * 10) },
-    { id: '3', text: 'Express my needs more openly in relationships', isCompleted: false, createdAt: new Date(Date.now() - 86400000 * 2) },
-  ]);
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [newGoalText, setNewGoalText] = useState('');
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleAddGoal = (e: FormEvent) => {
+  useEffect(() => {
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    const goalsColRef = collection(db, 'users', user.uid, 'goals');
+    const q = query(goalsColRef, orderBy('createdAt', 'desc'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedGoals = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        // Ensure createdAt is a Date object for display, Firestore timestamp for storage
+        createdAt: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate() : new Date(), 
+      } as Goal));
+      setGoals(fetchedGoals);
+      setIsLoading(false);
+    }, (error) => {
+      console.error("Error fetching goals:", error);
+      toast({ title: "Error", description: "Could not fetch goals.", variant: "destructive" });
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user, toast]);
+
+  const handleAddGoal = async (e: FormEvent) => {
     e.preventDefault();
-    if (!newGoalText.trim()) return;
-    const newGoal: Goal = {
-      id: Date.now().toString(),
-      text: newGoalText,
-      isCompleted: false,
-      createdAt: new Date(),
-    };
-    setGoals(prev => [newGoal, ...prev]);
-    setNewGoalText('');
-    setIsDialogOpen(false);
+    if (!newGoalText.trim() || !user) return;
+    try {
+      await addDoc(collection(db, 'users', user.uid, 'goals'), {
+        text: newGoalText,
+        isCompleted: false,
+        createdAt: serverTimestamp(),
+        userId: user.uid,
+      });
+      setNewGoalText('');
+      setIsDialogOpen(false);
+      toast({ title: "Goal Added", description: "Your new goal has been saved." });
+    } catch (error) {
+      console.error("Error adding goal:", error);
+      toast({ title: "Error", description: "Could not add goal.", variant: "destructive" });
+    }
   };
   
-  const handleEditGoal = (e: FormEvent) => {
+  const handleEditGoal = async (e: FormEvent) => {
     e.preventDefault();
-    if (!editingGoal || !editingGoal.text.trim()) return;
-    setGoals(prev => prev.map(g => g.id === editingGoal.id ? { ...g, text: editingGoal.text } : g));
-    setEditingGoal(null);
-    setIsDialogOpen(false);
+    if (!editingGoal || !editingGoal.text.trim() || !user) return;
+    try {
+      const goalRef = doc(db, 'users', user.uid, 'goals', editingGoal.id);
+      await updateDoc(goalRef, { text: editingGoal.text });
+      setEditingGoal(null);
+      setIsDialogOpen(false);
+      toast({ title: "Goal Updated", description: "Your goal has been updated." });
+    } catch (error) {
+      console.error("Error editing goal:", error);
+      toast({ title: "Error", description: "Could not update goal.", variant: "destructive" });
+    }
   };
 
-  const toggleComplete = (id: string) => {
-    setGoals(prev => prev.map(g => g.id === id ? { ...g, isCompleted: !g.isCompleted } : g));
+  const toggleComplete = async (id: string, currentStatus: boolean) => {
+    if (!user) return;
+    try {
+      const goalRef = doc(db, 'users', user.uid, 'goals', id);
+      await updateDoc(goalRef, { isCompleted: !currentStatus });
+    } catch (error) {
+      console.error("Error toggling goal completion:", error);
+      toast({ title: "Error", description: "Could not update goal status.", variant: "destructive" });
+    }
   };
   
-  const deleteGoal = (id: string) => {
-    setGoals(prev => prev.filter(g => g.id !== id));
+  const deleteGoal = async (id: string) => {
+    if (!user) return;
+    try {
+      const goalRef = doc(db, 'users', user.uid, 'goals', id);
+      await deleteDoc(goalRef);
+      toast({ title: "Goal Deleted", description: "Your goal has been removed." });
+    } catch (error) {
+      console.error("Error deleting goal:", error);
+      toast({ title: "Error", description: "Could not delete goal.", variant: "destructive" });
+    }
   };
 
   const openEditDialog = (goal: Goal) => {
@@ -70,11 +128,18 @@ export default function GoalsPage() {
   }
   
   const openAddDialog = () => {
-    setEditingGoal(null); // Clear editing state
-    setNewGoalText(''); // Clear new goal text
+    setEditingGoal(null);
+    setNewGoalText('');
     setIsDialogOpen(true);
   }
 
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -141,7 +206,7 @@ export default function GoalsPage() {
                   <Checkbox 
                     id={`goal-${goal.id}`} 
                     checked={goal.isCompleted} 
-                    onCheckedChange={() => toggleComplete(goal.id)}
+                    onCheckedChange={() => toggleComplete(goal.id, goal.isCompleted)}
                     className="h-5 w-5"
                   />
                   <label 
@@ -153,7 +218,7 @@ export default function GoalsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                    <p className="text-xs text-muted-foreground hidden sm:block">
-                    Added: {goal.createdAt.toLocaleDateString()}
+                    Added: {goal.createdAt instanceof Date ? goal.createdAt.toLocaleDateString() : new Date((goal.createdAt as Timestamp).seconds * 1000).toLocaleDateString()}
                   </p>
                   <Button variant="ghost" size="icon" onClick={() => openEditDialog(goal)} className="h-8 w-8">
                     <Edit2 className="h-4 w-4" />

@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -18,7 +19,7 @@ import { ModeToggle } from '@/components/mode-toggle';
 
 export function AppHeader() {
   const { user, signOut, loading } = useAuth();
-  const { toggleSidebar, isMobile } = useSidebar(); // From Shadcn Sidebar
+  const { toggleSidebar, isMobile } = useSidebar(); 
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'TR';
@@ -43,7 +44,6 @@ export function AppHeader() {
       </div>
       
       <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4 justify-end">
-        {/* Add search or other header items here if needed */}
         <ModeToggle />
         {user && !loading ? (
           <DropdownMenu>
@@ -66,8 +66,9 @@ export function AppHeader() {
               <DropdownMenuItem asChild>
                 <Link href="/dashboard"><LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard</Link>
               </DropdownMenuItem>
+              {/* Link to /settings which handles profile info */}
               <DropdownMenuItem asChild>
-                <Link href="/settings/profile"><UserCircle className="mr-2 h-4 w-4" /> Profile</Link>
+                <Link href="/settings"><UserCircle className="mr-2 h-4 w-4" /> Profile</Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/settings"><Settings className="mr-2 h-4 w-4" /> Settings</Link>
