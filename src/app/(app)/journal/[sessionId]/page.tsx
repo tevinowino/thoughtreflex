@@ -83,10 +83,10 @@ export default function JournalSessionPage() {
       const q = query(messagesColRef, orderBy('timestamp', 'asc'));
 
       const unsubscribe = onSnapshot(q, (snapshot) => {
-        const fetchedMessages = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          timestamp: doc.data().timestamp?.toDate ? doc.data().timestamp.toDate() : new Date(),
+        const fetchedMessages = snapshot.docs.map(docSnap => ({ // Renamed doc to docSnap to avoid conflict
+          id: docSnap.id,
+          ...docSnap.data(),
+          timestamp: docSnap.data().timestamp?.toDate ? docSnap.data().timestamp.toDate() : new Date(),
         } as Message));
         setMessages(fetchedMessages);
         setIsLoadingSession(false);
@@ -235,16 +235,16 @@ export default function JournalSessionPage() {
         </div>
       </CardHeader>
 
-      <ScrollArea className="flex-1 p-4 space-y-4" ref={scrollAreaRef}>
+      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         {messages.map((msg) => (
           <div
             key={msg.id}
             className={cn(
-              "flex items-end gap-2 max-w-[75%]",
+              "group flex items-end gap-2.5 max-w-[80%] mb-5", // Increased gap and mb, added group
               msg.sender === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
             )}
           >
-            <Avatar className="h-8 w-8">
+            <Avatar className="h-9 w-9 self-start"> {/* Slightly larger avatar, self-start to align with top of bubble */}
               <AvatarImage src={msg.avatar || undefined} data-ai-hint={msg.sender === 'user' ? 'profile user' : 'ai bot'} />
               <AvatarFallback>
                 {msg.sender === 'user' ? <User className="h-4 w-4" /> : <Brain className="h-4 w-4" />}
@@ -252,7 +252,7 @@ export default function JournalSessionPage() {
             </Avatar>
             <div
               className={cn(
-                "p-3 rounded-2xl shadow",
+                "px-4 py-3 rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-200 ease-in-out", // Adjusted padding and added hover shadow
                 msg.sender === 'user'
                   ? 'bg-primary text-primary-foreground rounded-br-none'
                   : 'bg-muted text-foreground rounded-bl-none'
@@ -260,8 +260,8 @@ export default function JournalSessionPage() {
             >
               <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
               <p className={cn(
-                  "text-xs mt-1",
-                  msg.sender === 'user' ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground/70 text-left'
+                  "text-xs mt-1.5 opacity-60 group-hover:opacity-100 transition-opacity duration-200", // Timestamp interactivity
+                  msg.sender === 'user' ? 'text-primary-foreground/80 text-right' : 'text-muted-foreground/80 text-left'
                 )}>
                 {(msg.timestamp instanceof Date ? msg.timestamp : new Date((msg.timestamp as Timestamp).seconds * 1000)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </p>
@@ -269,11 +269,11 @@ export default function JournalSessionPage() {
           </div>
         ))}
         {isLoadingAiResponse && (
-          <div className="flex items-end gap-2 mr-auto">
-            <Avatar className="h-8 w-8">
+          <div className="flex items-end gap-2.5 mr-auto mb-5">
+            <Avatar className="h-9 w-9 self-start">
               <AvatarFallback><Brain className="h-4 w-4" /></AvatarFallback>
             </Avatar>
-            <div className="p-3 rounded-2xl shadow bg-muted text-foreground rounded-bl-none">
+            <div className="px-4 py-3 rounded-2xl shadow-md bg-muted text-foreground rounded-bl-none">
               <p className="text-sm italic">AI is thinking...</p>
             </div>
           </div>
@@ -314,3 +314,5 @@ export default function JournalSessionPage() {
     </div>
   );
 }
+
+    
