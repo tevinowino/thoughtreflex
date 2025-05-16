@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -26,6 +27,22 @@ const TherapistModeOutputSchema = z.object({
 });
 export type TherapistModeOutput = z.infer<typeof TherapistModeOutputSchema>;
 
+// Define mode-specific instructions
+const therapistInstructions = {
+  Therapist: `You are in Therapist mode. Be reflective, deep, and slow in your responses. Ask emotionally intelligent follow-up questions. Identify recurring themes and give soft nudges.`,
+  Coach: `You are in Coach mode. Be motivational and structured in your responses. Check in on the user's goals and encourage progress.`,
+  Friend: `You are in Friend mode. Be casual, warm, and conversational in your responses. Inject light questions to keep the mood balanced and welcoming.`,
+};
+
+// Internal schema for the prompt, including the pre-selected instruction
+const TherapistModePromptInternalInputSchema = z.object({
+  userInput: z.string().describe('The user input to be processed.'),
+  mode: z.enum(['Therapist', 'Coach', 'Friend']).describe('The selected therapist mode (for context).'),
+  weeklyRecap: z.string().optional().describe('A summary of the user’s week.'),
+  goal: z.string().optional().describe('The user specified goal.'),
+  activeModeInstruction: z.string().describe('The specific instruction for the current AI mode.')
+});
+
 export async function getTherapistResponse(
   input: TherapistModeInput
 ): Promise<TherapistModeOutput> {
@@ -34,46 +51,43 @@ export async function getTherapistResponse(
 
 const prompt = ai.definePrompt({
   name: 'therapistModePrompt',
-  input: {schema: TherapistModeInputSchema},
+  input: {schema: TherapistModePromptInternalInputSchema}, // Use the new internal schema
   output: {schema: TherapistModeOutputSchema},
   prompt: `You are an AI therapist. Respond to the user input based on the selected mode.
 
 User Input: {{{userInput}}}
-
-Mode: {{{mode}}}
+Selected Mode: {{{mode}}}
 
 {{#if weeklyRecap}}
-  Weekly Recap: {{{weeklyRecap}}}
+Weekly Recap: {{{weeklyRecap}}}
 {{/if}}
 
 {{#if goal}}
-  User Goal: {{{goal}}}
+User Goal: {{{goal}}}
 {{/if}}
 
-
-
-{{#eq mode "Therapist"}}
-  You are in Therapist mode. Be reflective, deep, and slow in your responses. Ask emotionally intelligent follow-up questions. Identify recurring themes and give soft nudges.
-{{/eq}}
-
-{{#eq mode "Coach"}}
-  You are in Coach mode. Be motivational and structured in your responses. Check in on the user's goals and encourage progress.
-{{/eq}}
-
-{{#eq mode "Friend"}}
-  You are in Friend mode. Be casual, warm, and conversational in your responses. Inject light questions to keep the mood balanced and welcoming.
-{{/eq}}
-`,}
-);
+{{{activeModeInstruction}}}
+`,
+});
 
 const therapistModeFlow = ai.defineFlow(
   {
     name: 'therapistModeFlow',
-    inputSchema: TherapistModeInputSchema,
+    inputSchema: TherapistModeInputSchema, // Flow's public input schema
     outputSchema: TherapistModeOutputSchema,
   },
-  async input => {
-    const {output} = await prompt(input);
+  async (flowInput: TherapistModeInput) => {
+    const instruction = therapistInstructions[flowInput.mode];
+    
+    const promptPayload = {
+      userInput: flowInput.userInput,
+      mode: flowInput.mode, // Pass mode for context if needed in prompt (e.g., "Mode: {{{mode}}}")
+      weeklyRecap: flowInput.weeklyRecap,
+      goal: flowInput.goal,
+      activeModeInstruction: instruction, // Pass the selected instruction
+    };
+
+    const {output} = await prompt(promptPayload);
     return output!;
   }
 );
