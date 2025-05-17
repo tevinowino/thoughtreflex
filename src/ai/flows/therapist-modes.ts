@@ -9,7 +9,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { reframeThoughtTool, ReframeThoughtOutputSchema, type ReframeThoughtOutput } from './reframe-thought-flow.ts'; // Changed to explicit relative path with .ts
+import { reframeThoughtTool, ReframeThoughtOutputSchema, type ReframeThoughtOutput } from '@/ai/flows/reframe-thought-flow'; // Using alias path
 
 const AiChatMessageSchema = z.object({
   sender: z.enum(['user', 'ai']),
@@ -263,5 +263,3 @@ export async function getTherapistResponse(
 ): Promise<TherapistModeOutput> {
   return therapistModeFlow(input);
 }
-
-    
