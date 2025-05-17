@@ -11,17 +11,28 @@ import { useState, useEffect } from 'react';
 import { generateWeeklyRecap, WeeklyRecapInput } from '@/ai/flows/weekly-ai-recap';
 import { useAuth } from '@/contexts/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
+import {
+  collection,
+  addDoc,
+  serverTimestamp,
+  query,
+  orderBy,
+  onSnapshot,
+  Timestamp,
+  where,
+  getDocs,
+  // limit, // Optionally use if needed
+} from 'firebase/firestore';
 
 export interface WeeklyRecap {
   id: string;
   weekOf: string;
   title: string;
   summary: string;
-  emotionalHigh?: string;
+  emotionalHigh?: string; // These can be derived by AI or manually added later
   struggleOfTheWeek?: string;
   growthMoment?: string;
-  generatedAt: Date; // Ensure this is a Date object
+  generatedAt: Date;
   userId: string;
 }
 
@@ -73,13 +84,54 @@ export default function RecapsPage() {
     });
     
     try {
-      // TODO: In a real app, gather actual data from user's journal entries for the past week.
-      // This is a simplified input for now.
+      // 1. Fetch journal entries from the last 7 days
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const sevenDaysAgoTimestamp = Timestamp.fromDate(sevenDaysAgo);
+
+      const sessionsQuery = query(
+        collection(db, 'users', user.uid, 'journalSessions'),
+        where('lastUpdatedAt', '>=', sevenDaysAgoTimestamp), // Sessions updated in the last 7 days
+        orderBy('lastUpdatedAt', 'desc')
+      );
+
+      const sessionsSnapshot = await getDocs(sessionsQuery);
+      let allUserMessagesText = "";
+
+      if (sessionsSnapshot.empty) {
+         toast({
+          title: "Not Enough Recent Activity",
+          description: "No journal sessions found from the past week to generate a recap.",
+        });
+        setIsGenerating(false);
+        return;
+      }
+
+      for (const sessionDoc of sessionsSnapshot.docs) {
+        const messagesQuery = query(
+          collection(db, 'users', user.uid, 'journalSessions', sessionDoc.id, 'messages'),
+          where('sender', '==', 'user'), // Only user messages
+          orderBy('timestamp', 'asc')
+        );
+        const messagesSnapshot = await getDocs(messagesQuery);
+        messagesSnapshot.forEach(msgDoc => {
+          allUserMessagesText += msgDoc.data().text + "\n\n"; 
+        });
+      }
+
+      if (!allUserMessagesText.trim()) {
+        toast({
+          title: "No Journal Entries",
+          description: "You haven't written any user messages in your journal sessions this past week.",
+          variant: "default"
+        });
+        setIsGenerating(false);
+        return;
+      }
+      
       const recapInput: WeeklyRecapInput = {
-        emotionalTrends: "User reported feeling stressed about work but also moments of calm during walks.",
-        victories: "Completed a difficult task, took time for self-care.",
-        struggles: "Feeling overwhelmed by deadlines, occasional moments of self-doubt.",
-        additionalContext: `User is ${user.displayName || 'the user'}. They have been journaling consistently.`,
+        journalEntriesText: allUserMessagesText,
+        userName: user.displayName || undefined,
       };
 
       const result = await generateWeeklyRecap(recapInput);
@@ -87,16 +139,19 @@ export default function RecapsPage() {
       const newRecapData: Omit<WeeklyRecap, 'id' | 'generatedAt'> = {
         weekOf: `Week of ${new Date().toLocaleDateString()}`, 
         title: `Weekly Recap - ${new Date().toLocaleDateString()}`,
-        summary: result.recap,
+        summary: result.recap, // AI now generates the full summary
         userId: user.uid,
-        // Optional fields can be added here if AI generates them or if user can input them later
+        // The AI is prompted to include trends, victories, struggles in the summary.
+        // If the AI output schema were to return these separately, you'd map them here.
+        // emotionalHigh: result.emotionalHigh, 
+        // struggleOfTheWeek: result.struggleOfTheWeek,
+        // growthMoment: result.growthMoment, 
       };
 
       await addDoc(collection(db, 'users', user.uid, 'weeklyRecaps'), {
         ...newRecapData,
         generatedAt: serverTimestamp(),
       });
-      // No need to manually add to local state, onSnapshot will update it.
       
       toast({
         title: "Weekly Recap Generated!",
@@ -152,10 +207,10 @@ export default function RecapsPage() {
                 <CalendarDays className="h-10 w-10 text-primary" />
             </div>
             <CardTitle className="mt-4">No Recaps Yet</CardTitle>
-            <CardDescription>Your weekly AI-generated recaps will appear here after you've journaled for a bit.</CardDescription>
+            <CardDescription>Generate your first recap to see a summary of your week's reflections.</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">Keep journaling or generate your first recap!</p>
+            <p className="text-sm text-muted-foreground">Keep journaling and generate a recap when you're ready!</p>
           </CardContent>
         </Card>
       ) : (
@@ -232,5 +287,3 @@ export default function RecapsPage() {
     </div>
   );
 }
-
-    
