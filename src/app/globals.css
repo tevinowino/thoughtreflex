@@ -4,97 +4,100 @@
 
 @layer base {
   :root {
-    --background: 210 17% 98%; /* Ivory Mist #F8F9FA */
-    --foreground: 225 27% 33%; /* Midnight Indigo #3C4A6B */
+    --background: 210 20% 98%; /* Lighter Ivory Mist */
+    --foreground: 224 28% 30%; /* Slightly Softer Midnight Indigo */
 
     --card: 0 0% 100%; /* White */
-    --card-foreground: 225 27% 33%; /* Midnight Indigo */
+    --card-foreground: 224 28% 30%; /* Slightly Softer Midnight Indigo */
 
     --popover: 0 0% 100%; /* White */
-    --popover-foreground: 225 27% 33%; /* Midnight Indigo */
+    --popover-foreground: 224 28% 30%; /* Slightly Softer Midnight Indigo */
 
-    --primary: 170 30% 56%; /* Ocean Teal #6BB3A8 */
+    --primary: 175 35% 58%; /* Slightly brighter Ocean Teal */
     --primary-foreground: 0 0% 100%; /* White */
 
-    --secondary: 258 35% 75%; /* Soft Lavender #B4A7D6 */
-    --secondary-foreground: 225 27% 20%; /* Darker shade for text on Lavender */
+    --secondary: 255 40% 78%; /* Lighter, slightly more vibrant Soft Lavender */
+    --secondary-foreground: 224 28% 25%; /* Darker for text on Lavender */
 
-    --muted: 210 17% 95%; /* Slightly darker Ivory Mist */
-    --muted-foreground: 225 27% 45%; /* Lighter Midnight Indigo */
+    --muted: 210 20% 94%; /* Slightly darker, softer Ivory Mist */
+    --muted-foreground: 224 28% 48%; /* Lighter Midnight Indigo */
 
-    --accent: 19 77% 86%; /* Peach Blush #F6D1C1 */
-    --accent-foreground: 225 27% 20%; /* Darker shade for text on Peach */
+    --accent: 25 80% 88%; /* Softer Peach Blush */
+    --accent-foreground: 20 60% 30%; /* Darker for text on Peach */
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 72% 51%; /* Slightly softer red */
     --destructive-foreground: 0 0% 98%;
 
-    --border: 210 17% 90%;
-    --input: 210 17% 90%;
-    --ring: 170 30% 56%; /* Ocean Teal */
+    --border: 210 17% 88%; /* Softer border */
+    --input: 210 17% 92%; /* Lighter input background */
+    --ring: 175 35% 58%; /* Primary color for ring */
 
-    --radius: 0.75rem; /* Increased from 0.5rem for softer corners */
+    --radius: 0.75rem;
 
-    --chart-1: 170 30% 56%;
-    --chart-2: 258 35% 75%;
-    --chart-3: 19 77% 86%;
-    --chart-4: 225 27% 33%;
-    --chart-5: 0 84.2% 60.2%;
+    --chart-1: 175 35% 58%; /* Ocean Teal */
+    --chart-2: 255 40% 78%; /* Soft Lavender */
+    --chart-3: 25 80% 88%;  /* Peach Blush */
+    --chart-4: 224 28% 30%; /* Midnight Indigo */
+    --chart-5: 0 72% 51%;   /* Destructive */
 
     /* Sidebar specific colors for light mode */
-    --sidebar-background: 225 27% 33%; /* Midnight Indigo #3C4A6B */
-    --sidebar-foreground: 210 17% 95%; /* Light Ivory/White for text */
-    --sidebar-primary: 170 30% 60%; /* Ocean Teal (active item) */
+    --sidebar-background: 224 28% 30%; /* Midnight Indigo */
+    --sidebar-foreground: 210 20% 94%; /* Light Ivory/White for text */
+    --sidebar-primary: 175 35% 62%; /* Ocean Teal (active item) */
     --sidebar-primary-foreground: 0 0% 100%; /* White */
-    --sidebar-accent: 225 27% 40%; /* Slightly lighter Midnight Indigo for hover */
-    --sidebar-accent-foreground: 210 17% 98%; /* Lightest Ivory for hover text */
-    --sidebar-border: 225 27% 28%; /* Darker shade of Midnight Indigo */
-    --sidebar-ring: 170 30% 60%; /* Ocean Teal */
+    --sidebar-accent: 224 28% 38%; /* Slightly lighter Midnight Indigo for hover */
+    --sidebar-accent-foreground: 210 20% 98%; /* Lightest Ivory for hover text */
+    --sidebar-border: 224 28% 25%; /* Darker shade of Midnight Indigo */
+    --sidebar-ring: 175 35% 62%; /* Ocean Teal */
   }
 
   .dark {
-    --background: 227 12% 14%; /* Space Gray #1F1F28 */
-    --foreground: 210 17% 95%; /* Light Ivory/White */
+    --background: 225 15% 12%; /* Darker Space Gray */
+    --foreground: 210 17% 90%; /* Softer Off-White */
 
-    --card: 227 12% 18%; /* Slightly lighter than Space Gray */
-    --card-foreground: 210 17% 95%; /* Light Ivory/White */
+    --card: 225 15% 16%; /* Slightly lighter than background */
+    --card-foreground: 210 17% 90%; /* Softer Off-White */
 
-    --popover: 227 12% 18%;
-    --popover-foreground: 210 17% 95%;
+    --popover: 225 15% 16%;
+    --popover-foreground: 210 17% 90%;
 
-    --primary: 170 30% 60%; /* Lighter Ocean Teal */
-    --primary-foreground: 227 12% 10%; /* Very Dark for text on Teal */
+    --primary: 175 40% 65%; /* Lighter Ocean Teal for dark mode */
+    --primary-foreground: 225 15% 8%; /* Very Dark for text on Teal */
 
-    --secondary: 258 35% 60%; /* Adjusted Soft Lavender */
-    --secondary-foreground: 210 17% 95%; /* Light Ivory/White */
+    --secondary: 255 40% 65%; /* Adjusted Soft Lavender */
+    --secondary-foreground: 210 17% 90%; /* Softer Off-White */
 
-    --muted: 227 12% 20%;
-    --muted-foreground: 210 17% 70%;
+    --muted: 225 15% 18%;
+    --muted-foreground: 210 17% 65%;
 
-    --accent: 19 77% 70%; /* Adjusted Peach Blush */
-    --accent-foreground: 227 12% 10%; /* Very Dark for text on Peach */
+    --accent: 25 70% 75%; /* Adjusted Peach Blush for dark mode */
+    --accent-foreground: 20 50% 15%; /* Very Dark for text on Peach */
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 65% 45%; /* Softer dark red */
+    --destructive-foreground: 0 0% 95%;
 
-    --border: 227 12% 25%;
-    --input: 227 12% 25%;
-    --ring: 170 30% 60%; /* Lighter Ocean Teal */
+    --border: 225 15% 22%;
+    --input: 225 15% 22%;
+    --ring: 175 40% 65%; /* Lighter Ocean Teal */
     
     /* Sidebar specific colors for dark mode */
-    --sidebar-background: 227 12% 10%; /* Darker Space Gray */
-    --sidebar-foreground: 210 17% 85%; /* Off-white */
-    --sidebar-primary: 170 30% 56%; /* Ocean Teal (active item) */
+    --sidebar-background: 225 15% 8%; /* Even Darker Space Gray */
+    --sidebar-foreground: 210 17% 80%; /* Muted Off-white */
+    --sidebar-primary: 175 35% 58%; /* Ocean Teal (active item) */
     --sidebar-primary-foreground: 0 0% 100%; /* White */
-    --sidebar-accent: 227 12% 15%; /* Slightly lighter dark gray for hover */
-    --sidebar-accent-foreground: 210 17% 95%; /* Lightest Ivory for hover text */
-    --sidebar-border: 227 12% 8%; /* Even darker gray */
-    --sidebar-ring: 170 30% 56%; /* Ocean Teal */
+    --sidebar-accent: 225 15% 14%; /* Slightly lighter dark gray for hover */
+    --sidebar-accent-foreground: 210 17% 92%; /* Light Ivory for hover text */
+    --sidebar-border: 225 15% 6%; /* Darkest gray */
+    --sidebar-ring: 175 35% 58%; /* Ocean Teal */
   }
 }
 
 @layer base {
   * {
     @apply border-border;
+  }
+  html {
+    @apply scroll-smooth;
   }
   body {
     @apply bg-background text-foreground;
@@ -106,10 +109,10 @@
   h1 { @apply text-4xl md:text-5xl; }
   h2 { @apply text-3xl md:text-4xl; }
   h3 { @apply text-2xl md:text-3xl; }
-  p { @apply leading-relaxed; }
+  p { @apply leading-relaxed text-foreground/80; } /* Default p with slightly muted text */
 }
 
-/* Animated Gradient for Hero Section */
+/* Animated Gradient for Hero Section (Kept existing) */
 @keyframes gradientAnimation {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
@@ -120,4 +123,26 @@
   background: linear-gradient(-45deg, hsl(var(--secondary)), hsl(var(--background)), hsl(var(--accent)), hsl(var(--secondary)));
   background-size: 400% 400%;
   animation: gradientAnimation 15s ease infinite;
+}
+
+/* Custom scrollbar for better aesthetics (optional) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted) / 0.5);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.7);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary));
+}
+
+/* Focus visible styles for better accessibility */
+*:focus-visible {
+  @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
 }

@@ -1,4 +1,4 @@
-
+// src/app/(app)/journal/[sessionId]/page.tsx
 'use client';
 
 import { useState, useEffect, useRef, FormEvent } from 'react';
@@ -20,6 +20,7 @@ import { db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, addDoc, collection, query, orderBy, onSnapshot, serverTimestamp, Timestamp, setDoc, where, getDocs, limit, deleteDoc, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 
 
 interface Message {
@@ -60,6 +61,8 @@ export default function JournalSessionPage() {
   const [isDeletingSession, setIsDeletingSession] = useState(false);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+
 
   useEffect(() => {
     if (user?.defaultTherapistMode) {
@@ -71,8 +74,9 @@ export default function JournalSessionPage() {
     if (!user || authLoading) return;
 
     if (initialSessionId === 'new') {
-      setSessionTitle('New Journal Session');
-      setEditableSessionTitle('New Journal Session');
+      const newTitle = `New Journal - ${new Date().toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
+      setSessionTitle(newTitle);
+      setEditableSessionTitle(newTitle);
       setMessages([
         { id: '0', text: "Welcome! I'm Mira. I'm here to listen, and please know this space is private and confidential. What's on your mind today?", sender: 'ai', timestamp: new Date(), name: 'Mira', avatar: '/logo-ai.png' },
       ]);
@@ -117,12 +121,12 @@ export default function JournalSessionPage() {
     }
   }, [initialSessionId, user, authLoading, router, toast]);
 
-  useEffect(() => {
-    const viewport = scrollAreaRef.current?.querySelector<HTMLDivElement>('[data-radix-scroll-area-viewport]');
-    if (viewport) {
-      viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
+ useEffect(() => {
+    if (viewportRef.current) {
+      viewportRef.current.scrollTo({ top: viewportRef.current.scrollHeight, behavior: 'smooth' });
     }
   }, [messages]);
+
 
   const handleStreakUpdate = async () => {
     if (!user) return;
@@ -203,7 +207,7 @@ export default function JournalSessionPage() {
       let actualSessionId = currentDbSessionId;
       
       if (!actualSessionId) {
-        const newSessionTitle = `Journal - ${new Date().toLocaleDateString()}`;
+        const newSessionTitle = `Journal - ${new Date().toLocaleDateString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
         const sessionColRef = collection(db, 'users', user.uid, 'journalSessions');
         const newSessionDoc = await addDoc(sessionColRef, {
           title: newSessionTitle,
@@ -363,22 +367,22 @@ export default function JournalSessionPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-theme(spacing.32))] md:h-[calc(100vh-theme(spacing.24))] bg-card rounded-2xl shadow-xl overflow-hidden">
-      <CardHeader className="flex flex-row items-center justify-between p-4 border-b">
+    <div className="flex flex-col h-[calc(100vh-theme(spacing.28)-2rem)] md:h-[calc(100vh-theme(spacing.20)-2rem)] bg-card rounded-2xl shadow-2xl overflow-hidden">
+      <CardHeader className="flex flex-row items-center justify-between p-4 border-b bg-muted/30">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" asChild>
+          <Button variant="ghost" size="icon" asChild className="hover:bg-primary/10">
             <Link href="/journal">
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-5 w-5 text-primary" />
               <span className="sr-only">Back to Journals</span>
             </Link>
           </Button>
-          <CardTitle className="text-xl truncate">{sessionTitle}</CardTitle>
+          <CardTitle className="text-lg md:text-xl font-semibold truncate text-foreground">{sessionTitle}</CardTitle>
         </div>
         <div className="flex items-center gap-2">
           <Select value={currentTherapistMode} onValueChange={(value: TherapistMode) => setCurrentTherapistMode(value)}>
-            <SelectTrigger className="w-[150px] h-9">
+            <SelectTrigger className="w-[140px] sm:w-[150px] h-9 text-sm shadow-sm">
               <div className="flex items-center">
-                {modeIcons[currentTherapistMode]}
+                {React.cloneElement(modeIcons[currentTherapistMode], {className: "mr-1.5 h-4 w-4"})}
                 <SelectValue placeholder="Select Mode" />
               </div>
             </SelectTrigger>
@@ -390,36 +394,37 @@ export default function JournalSessionPage() {
           </Select>
           <Dialog open={isSessionSettingsOpen} onOpenChange={setIsSessionSettingsOpen}>
             <DialogTrigger asChild>
-              <Button variant="ghost" size="icon" disabled={!currentDbSessionId} onClick={() => setEditableSessionTitle(sessionTitle)}>
-                <Settings2 className="h-5 w-5" />
+              <Button variant="ghost" size="icon" disabled={!currentDbSessionId} onClick={() => setEditableSessionTitle(sessionTitle)} className="hover:bg-primary/10">
+                <Settings2 className="h-5 w-5 text-primary" />
                 <span className="sr-only">Session Settings</span>
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-md rounded-lg">
               <DialogHeader>
-                <DialogTitle>Session Settings</DialogTitle>
-                <DialogDescription>Rename your journal session or delete it.</DialogDescription>
+                <DialogTitle className="text-xl">Session Settings</DialogTitle>
+                <DialogDescription>Rename your journal session or delete it permanently.</DialogDescription>
               </DialogHeader>
               <div className="py-4 space-y-4">
-                <label htmlFor="sessionTitleInput" className="text-sm font-medium">Session Title</label>
+                <Label htmlFor="sessionTitleInput" className="text-sm font-medium">Session Title</Label>
                 <Input
                   id="sessionTitleInput"
                   value={editableSessionTitle}
                   onChange={(e) => setEditableSessionTitle(e.target.value)}
                   placeholder="Enter session title"
+                  className="bg-muted/50"
                 />
               </div>
-              <DialogFooter className="justify-between sm:justify-between">
+              <DialogFooter className="justify-between sm:justify-between gap-2">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                     <Button variant="destructive" disabled={isDeletingSession}>
+                     <Button variant="destructive" outline disabled={isDeletingSession} className="w-full sm:w-auto">
                       {isDeletingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                       Delete Session
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                       <AlertDialogDescription>
                         This will permanently delete this journal session and all its messages. This action cannot be undone.
                       </AlertDialogDescription>
@@ -427,14 +432,14 @@ export default function JournalSessionPage() {
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                       <AlertDialogAction onClick={handleDeleteSession} className={cn(buttonVariants({ variant: "destructive" }))}>
-                        Delete
+                        Yes, Delete Session
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={() => setIsSessionSettingsOpen(false)}>Cancel</Button>
-                  <Button onClick={handleSaveSessionTitle}>Save Title</Button>
+                  <Button onClick={handleSaveSessionTitle} className="shadow-sm">Save Title</Button>
                 </div>
               </DialogFooter>
             </DialogContent>
@@ -442,38 +447,42 @@ export default function JournalSessionPage() {
         </div>
       </CardHeader>
 
-      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+      <ScrollArea className="flex-1 p-4 sm:p-6" viewportRef={viewportRef} ref={scrollAreaRef}>
+        <div className="space-y-6">
         {messages.map((msg) => (
-          <div
+          <motion.div
             key={msg.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
             className={cn(
-              "group flex items-end gap-2.5 max-w-[80%] mb-5", 
+              "group flex items-end gap-2.5 max-w-[85%] sm:max-w-[75%] mb-3", 
               msg.sender === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
             )}
           >
-            <Avatar className="h-9 w-9 self-start"> 
+            <Avatar className="h-10 w-10 self-start shadow-sm border-2 border-background"> 
               <AvatarImage src={msg.avatar || undefined} data-ai-hint={msg.sender === 'user' ? 'profile user' : 'ai bot'} />
-              <AvatarFallback>
-                {msg.sender === 'user' ? <User className="h-4 w-4" /> : <Brain className="h-4 w-4" />}
+              <AvatarFallback className={cn(msg.sender === 'user' ? 'bg-secondary text-secondary-foreground' : 'bg-primary/20 text-primary')}>
+                {msg.sender === 'user' ? <User className="h-5 w-5" /> : <Brain className="h-5 w-5" />}
               </AvatarFallback>
             </Avatar>
             <div
               className={cn(
-                "px-4 py-3 rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-200 ease-in-out", 
+                "px-4 py-3 rounded-2xl shadow-md group-hover:shadow-lg transition-shadow duration-200 ease-in-out text-sm", 
                 msg.sender === 'user'
-                  ? 'bg-primary text-primary-foreground rounded-br-none'
-                  : 'bg-muted text-foreground rounded-bl-none'
+                  ? 'bg-primary text-primary-foreground rounded-br-lg'
+                  : 'bg-muted text-foreground rounded-bl-lg'
               )}
             >
-              <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+              <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
                {msg.sender === 'ai' && msg.suggestedGoalText && !msg.isGoalAdded && (
                 <div className="mt-3 pt-3 border-t border-foreground/20">
-                  <p className="text-xs font-semibold text-foreground/80 mb-1">Mira's Goal Suggestion:</p>
-                  <p className="text-sm text-foreground/90 italic">"{msg.suggestedGoalText}"</p>
+                  <p className="text-xs font-semibold text-foreground/80 mb-1.5">Mira's Goal Suggestion:</p>
+                  <p className="text-sm text-foreground/90 italic mb-2">"{msg.suggestedGoalText}"</p>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="mt-2 text-xs h-auto py-1 px-2 bg-background hover:bg-accent"
+                    className="text-xs h-auto py-1.5 px-3 bg-background hover:bg-accent border-primary/30 text-primary hover:text-primary"
                     onClick={() => handleAddSuggestedGoal(msg.id, msg.suggestedGoalText!)}
                   >
                     <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Add this goal
@@ -481,41 +490,46 @@ export default function JournalSessionPage() {
                 </div>
               )}
               {msg.sender === 'ai' && msg.suggestedGoalText && msg.isGoalAdded && (
-                  <div className="mt-3 pt-3 border-t border-green-500/30">
-                      <p className="text-sm text-green-600 dark:text-green-400 flex items-center">
+                  <div className="mt-3 pt-2 border-t border-green-600/30 dark:border-green-400/30">
+                      <p className="text-xs text-green-600 dark:text-green-400 flex items-center font-medium">
                         <CheckCircle className="mr-1.5 h-4 w-4" /> Goal added to your list!
                       </p>
                   </div>
               )}
               <p className={cn(
-                  "text-xs mt-1.5 opacity-60 group-hover:opacity-100 transition-opacity duration-200", 
-                  msg.sender === 'user' ? 'text-primary-foreground/80 text-right' : 'text-muted-foreground/80 text-left'
+                  "text-[10px] mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in-out", 
+                  msg.sender === 'user' ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground text-left'
                 )}>
                 {(msg.timestamp instanceof Date ? msg.timestamp : new Date((msg.timestamp as Timestamp).seconds * 1000)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
-          </div>
+          </motion.div>
         ))}
         {isLoadingAiResponse && (
-          <div className="flex items-end gap-2.5 mr-auto mb-5">
-            <Avatar className="h-9 w-9 self-start">
-                <AvatarImage src="/logo-ai.png" alt="Mira AI" data-ai-hint="ai bot" />
-              <AvatarFallback><Brain className="h-4 w-4" /></AvatarFallback>
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-end gap-2.5 mr-auto mb-3"
+          >
+            <Avatar className="h-10 w-10 self-start shadow-sm">
+                <AvatarImage src="/logo-ai.png" alt="Mira AI" data-ai-hint="ai bot thinking"/>
+              <AvatarFallback className="bg-primary/20 text-primary"><Brain className="h-5 w-5 animate-pulse" /></AvatarFallback>
             </Avatar>
-            <div className="px-4 py-3 rounded-2xl shadow-md bg-muted text-foreground rounded-bl-none">
-              <p className="text-sm italic">Mira is thinking...</p>
+            <div className="px-4 py-3 rounded-2xl shadow-md bg-muted text-foreground rounded-bl-lg">
+              <p className="text-sm italic text-muted-foreground">Mira is typing...</p>
             </div>
-          </div>
+          </motion.div>
         )}
+        </div>
       </ScrollArea>
 
-      <form onSubmit={handleSendMessage} className="border-t p-4 bg-background">
+      <form onSubmit={handleSendMessage} className="border-t p-3 sm:p-4 bg-muted/30">
         <div className="relative flex items-center">
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Share your thoughts here..."
-            className="pr-20 resize-none min-h-[60px] max-h-[120px] rounded-xl text-base"
+            className="pr-24 sm:pr-28 resize-none min-h-[56px] max-h-[160px] rounded-xl text-base border-input focus:border-primary shadow-sm"
             rows={1}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -525,15 +539,15 @@ export default function JournalSessionPage() {
             }}
           />
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-            <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-primary" onClick={() => toast({title: "Not Implemented", description:"Voice input coming soon!"})}>
+            <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-primary" onClick={() => toast({title: "Coming Soon!", description:"Voice input will be available in a future update."})}>
               <Mic className="h-5 w-5" />
               <span className="sr-only">Voice Input</span>
             </Button>
-            <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-primary" onClick={() => toast({title: "Not Implemented", description:"File attachment coming soon!"})}>
+            {/* <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-primary" onClick={() => toast({title: "Coming Soon!", description:"File attachment will be available soon."})}>
               <Paperclip className="h-5 w-5" />
               <span className="sr-only">Attach File</span>
-            </Button>
-            <Button type="submit" size="icon" disabled={isLoadingAiResponse || !input.trim()}>
+            </Button> */}
+            <Button type="submit" size="icon" disabled={isLoadingAiResponse || !input.trim()} className="rounded-lg shadow-md">
               <Send className="h-5 w-5" />
               <span className="sr-only">Send Message</span>
             </Button>
