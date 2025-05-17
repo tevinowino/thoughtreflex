@@ -7,30 +7,37 @@ ThoughtReflex is a web application designed to be your personal AI-powered thera
 
 ## Key Features
 
-*   **AI-Powered Journaling**: Engage in empathetic, chat-based conversations with Mira, your AI companion, designed to help you explore and understand your feelings.
+*   **AI-Powered Journaling (Mira)**: Engage in empathetic, chat-based conversations with Mira, your AI companion. Mira is designed to help you explore and understand your feelings.
+    *   **Contextual AI Conversations**: Mira remembers the flow of your current journaling session, providing relevant follow-ups and maintaining context within the active chat.
+    *   **AI-Suggested Goals**: During your journaling sessions, Mira may suggest actionable goals for self-improvement based on your conversation. You can easily add these to your goal list.
 *   **Adaptive Therapist Modes**: Tailor Mira's interaction style to your current needs by choosing between:
     *   **Therapist Mode**: For deep, reflective, and slow-paced conversations.
     *   **Coach Mode**: For motivational, structured guidance, helping you work towards your goals.
     *   **Friend Mode**: For casual, warm, and supportive conversations.
-*   **Contextual AI Conversations**: Mira remembers the flow of your current journaling session, providing relevant follow-ups and maintaining context.
-*   **Traditional Notebook**: A private, non-AI space for your unfiltered thoughts, free-writing, or quick notes.
-*   **Goal Setting & Tracking**: Define, manage, and track your personal healing and growth milestones. Mira can reference your active goals in "Coach" mode.
-*   **Dynamic Weekly AI Recaps**: At the end of each week, generate a personalized summary of your journal entries. Mira identifies emotional trends, victories, and struggles from your actual writings.
-*   **Personalized Insights Page**: Uncover deeper patterns in your emotional landscape with dynamically generated insights:
-    *   **Emotion Trends**: Visualizes sentiment (positive, negative, neutral) from your recent weekly recaps in a bar chart.
-    *   **Recurring Themes**: Identifies common topics and their frequency from your journal entries over the last 30 days.
-    *   **Key Suggestions**: Offers personalized observations and actionable suggestions based on your recent journaling.
-*   **Journaling Streaks**: Stay motivated with daily journaling streaks! The app tracks your current and longest streaks for consistent reflection.
+*   **Traditional Notebook**: A private, non-AI space for your unfiltered thoughts, free-writing, or quick notes. Create, edit, and delete entries as you wish.
+*   **Goal Setting & Tracking**: Define, manage, and track your personal healing and growth milestones. Mark goals as complete and edit them as needed. Mira can reference your active goals in "Coach" mode.
+*   **Dynamic Weekly AI Recaps**: At the end of each week (or when you choose to generate it), ThoughtReflex creates a personalized summary of your journal entries from the past seven days. Mira identifies emotional trends, victories, and struggles from your actual writings. View individual recaps in detail.
+*   **Personalized Insights Page**: Uncover deeper patterns in your emotional landscape with dynamically generated insights based on your recent activity:
+    *   **Emotion Trends**: Visualizes sentiment (positive, negative, neutral scores) from your recent weekly recaps in a bar chart.
+    *   **Recurring Themes**: Identifies common topics and their frequency (mention count) from your journal entries over the last 30 days.
+    *   **Key Suggestions**: Offers personalized observations and actionable suggestions based on your recent journaling activity.
+*   **Journaling Streaks**: Stay motivated with daily journaling streaks! The app tracks your current and longest streaks for consistent reflection. Streaks are updated when you make your first journal entry of the day.
 *   **Secure User Authentication**:
     *   Sign up and log in securely using Email/Password.
     *   Option to sign in with Google OAuth for quick access.
+*   **Session Management**:
+    *   Rename your AI journal sessions for better organization.
+    *   Delete entire AI journal sessions if needed.
 *   **Comprehensive User Settings**:
     *   Update your display name.
-    *   Set your default AI therapist mode.
+    *   Choose a character avatar to represent you.
+    *   Set your default AI therapist mode (Therapist, Coach, or Friend).
     *   Change your account password.
-    *   Export all your personal data (profile, goals, journals, notebook entries) in JSON format.
+    *   **Export Your Data**: Download all your personal data (profile, goals, journal sessions with messages, notebook entries, weekly recaps) in JSON format.
+    *   **Delete Your Data**: Option to delete all your application data (journals, goals, recaps, notebook entries, profile settings within the app) while keeping your login account active, allowing for a fresh start.
 *   **Theme Customization**: Easily switch between light and dark modes for a comfortable viewing experience.
-*   **Responsive Design**: Enjoy a seamless experience across desktop, tablet, and mobile devices.
+*   **Privacy Focused**: Clear privacy reminders are integrated throughout the app, assuring users that their entries are confidential.
+*   **Responsive Design**: Enjoy a seamless experience across desktop, tablet,and mobile devices.
 
 ## Technology Stack
 
@@ -74,22 +81,20 @@ Follow these instructions to get a local copy of ThoughtReflex up and running fo
 2.  **Set up Firebase**:
     *   Create a new Firebase project at [https://console.firebase.google.com/](https://console.firebase.google.com/).
     *   In your Firebase project, enable the following services:
-        *   **Authentication**: Enable "Email/Password" and "Google" sign-in methods. Add `localhost` to the list of authorized domains for development.
+        *   **Authentication**: Enable "Email/Password" and "Google" sign-in methods.
+            *   Go to Authentication > Settings > Authorized domains and add `localhost`.
         *   **Firestore Database**: Create a Firestore database in Native mode.
     *   Go to **Project settings** > **General**. Under "Your apps", click the Web icon (`</>`) to add a web app.
     *   Register your app and copy the Firebase configuration object.
 
 3.  **Environment Variables**:
-    *   Create a `.env` file in the root of your project by copying the example:
-        ```bash
-        cp .env.example .env
-        ```
-    *   Open the `.env` file and fill in your Firebase project's configuration details. These should be prefixed with `NEXT_PUBLIC_`:
+    *   Create a `.env` file in the root of your project (you can copy `.env.example` if it exists, or create it from scratch).
+    *   Open the `.env` file and fill in your Firebase project's configuration details. These **must** be prefixed with `NEXT_PUBLIC_`:
         ```env
         NEXT_PUBLIC_FIREBASE_API_KEY="YOUR_API_KEY"
         NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="YOUR_AUTH_DOMAIN"
         NEXT_PUBLIC_FIREBASE_PROJECT_ID="YOUR_PROJECT_ID"
-        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="YOUR_STORAGE_BUCKET"
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="YOUR_PROJECT_ID.appspot.com"
         NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="YOUR_MESSAGING_SENDER_ID"
         NEXT_PUBLIC_FIREBASE_APP_ID="YOUR_APP_ID"
         NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID="YOUR_MEASUREMENT_ID" # Optional for Analytics
@@ -126,32 +131,47 @@ Follow these instructions to get a local copy of ThoughtReflex up and running fo
 
 ## Firestore Security Rules
 
-For production, and even for robust development, you **must** set up Firestore security rules to protect user data. A basic example is provided below. Apply these in the Firebase console under Firestore Database > Rules.
+For production, and even for robust development, you **must** set up Firestore security rules to protect user data. A comprehensive example is provided below. Apply these in the Firebase console under Firestore Database > Rules.
 
 ```json
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // User profile document
     match /users/{userId} {
       allow read, update, delete: if request.auth != null && request.auth.uid == userId;
       allow create: if request.auth != null; // Allow user doc creation on signup
+    }
 
-      match /goals/{goalId} {
-        allow read, write, delete: if request.auth != null && request.auth.uid == userId;
-      }
-      match /journalSessions/{sessionId} {
-        allow read, write, delete: if request.auth != null && request.auth.uid == userId;
-        match /messages/{messageId} {
-          allow read, write, delete: if request.auth != null && request.auth.uid == userId;
-        }
-      }
-      match /weeklyRecaps/{recapId} {
-        allow read, write, delete: if request.auth != null && request.auth.uid == userId;
-      }
-      match /notebookEntries/{entryId} {
+    // Goals subcollection
+    match /users/{userId}/goals/{goalId} {
+      allow read, write, delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Journal Sessions subcollection
+    match /users/{userId}/journalSessions/{sessionId} {
+      allow read, write, delete: if request.auth != null && request.auth.uid == userId;
+      
+      // Messages subcollection within Journal Sessions
+      match /messages/{messageId} {
         allow read, write, delete: if request.auth != null && request.auth.uid == userId;
       }
     }
+
+    // Weekly Recaps subcollection
+    match /users/{userId}/weeklyRecaps/{recapId} {
+      allow read, write, delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Notebook Entries subcollection
+    match /users/{userId}/notebookEntries/{entryId} {
+      allow read, write, delete: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // (Optional) Insights subcollection - if you decide to persist generated insights
+    // match /users/{userId}/insights/{insightDocId} {
+    //   allow read, write, delete: if request.auth != null && request.auth.uid == userId;
+    // }
   }
 }
 ```
@@ -172,7 +192,7 @@ In the project directory, you can run:
 
 ```
 /
-├── public/                 # Static assets
+├── public/                 # Static assets (like Mira's avatar logo-ai.png)
 ├── src/
 │   ├── ai/                 # Genkit AI flows and configuration
 │   │   ├── flows/          # Individual AI flow implementations
@@ -180,7 +200,26 @@ In the project directory, you can run:
 │   │   └── genkit.ts       # Genkit global AI instance
 │   ├── app/                # Next.js App Router pages and layouts
 │   │   ├── (app)/          # Authenticated app routes (dashboard, journal, etc.)
+│   │   │   ├── dashboard/
+│   │   │   ├── goals/
+│   │   │   ├── insights/
+│   │   │   ├── journal/
+│   │   │   │   ├── [sessionId]/
+│   │   │   │   └── page.tsx
+│   │   │   ├── notebook/
+│   │   │   │   ├── [entryId]/
+│   │   │   │   └── page.tsx
+│   │   │   ├── recaps/
+│   │   │   │   ├── [recapId]/
+│   │   │   │   └── page.tsx
+│   │   │   ├── settings/
+│   │   │   │   ├── change-password/
+│   │   │   │   ├── export-data/
+│   │   │   │   ├── profile/ (redirects to main settings)
+│   │   │   │   └── page.tsx  (main settings page)
+│   │   │   └── layout.tsx    (app layout with sidebar and header)
 │   │   ├── (auth)/         # Authentication routes (login, signup)
+│   │   │   └── layout.tsx
 │   │   ├── about/
 │   │   ├── careers/
 │   │   ├── contact/
@@ -190,14 +229,14 @@ In the project directory, you can run:
 │   │   ├── layout.tsx      # Root layout
 │   │   └── page.tsx        # Landing page
 │   ├── components/
-│   │   ├── app/            # Components specific to the authenticated app
-│   │   ├── auth/           # Authentication-related components
+│   │   ├── app/            # Components specific to the authenticated app (header, sidebar, nav)
+│   │   ├── auth/           # Authentication-related components (forms, OAuth buttons)
 │   │   ├── landing/        # Components for the landing page
 │   │   ├── ui/             # ShadCN UI components (Button, Card, etc.)
 │   │   └── mode-toggle.tsx # Dark/Light mode toggle
 │   │   └── theme-provider.tsx
 │   ├── contexts/
-│   │   └── auth-context.tsx # Authentication context and hooks
+│   │   └── auth-context.tsx # Authentication context, user profile management, and hooks
 │   ├── hooks/
 │   │   ├── use-mobile.tsx  # Hook for detecting mobile viewport
 │   │   └── use-toast.ts    # Toast notification hook
@@ -213,14 +252,18 @@ In the project directory, you can run:
 └── tsconfig.json           # TypeScript configuration
 ```
 
-## Future Enhancements
+## Future Enhancements (Potential Next Steps)
 
-*   **Deeper AI Memory**: Implement long-term memory for Mira across sessions.
+*   **Deeper AI Memory**: Implement long-term memory for Mira across sessions by storing and retrieving key user insights or summaries.
 *   **Advanced Insights**: More sophisticated data analysis and visualizations on the Insights page.
-*   **Notifications**: Reminders for journaling or goal check-ins.
+*   **Persistent Insights**: Save generated insights (emotion trends, themes) to Firestore to avoid re-generation on every page visit and allow for historical tracking.
+*   **Notifications**: Reminders for journaling or goal check-ins (e.g., using Firebase Cloud Messaging).
 *   **Voice Input**: Allow users to speak their journal entries.
-*   **Mood Tracking**: Dedicated mood tracking features.
-*   **More AI Tools**: Potentially add AI tools for specific exercises (e.g., CBT, mindfulness).
+*   **File Attachments**: Allow users to attach relevant files/images to journal entries.
+*   **Mood Tracking**: Dedicated mood tracking features, perhaps with daily check-ins.
+*   **More AI Tools**: Potentially add AI tools for specific therapeutic exercises (e.g., Cognitive Behavioral Therapy techniques, guided mindfulness).
+*   **Enhanced Error Handling & Loading States**: Further refinement for a smoother user experience.
+*   **Full Account Deletion (Server-Side)**: For robust account deletion, implement a Firebase Function triggered on user deletion from Auth to clean up all Firestore data.
 
 ---
 
