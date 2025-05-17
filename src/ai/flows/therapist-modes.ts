@@ -34,8 +34,15 @@ export type TherapistModeInput = z.infer<typeof TherapistModeInputSchema>;
 
 const TherapistModeOutputSchema = z.object({
   response: z.string().describe('The AI’s conversational reply.'),
-  suggestedGoalText: z.string().optional().describe('Optional goal suggested to help user make progress. Should be concise and actionable, starting with a verb (e.g., "Practice deep breathing for 5 minutes", "Write down one positive thing that happened today").'),
-  reframingData: ReframeThoughtOutputSchema.optional().describe("Structured data from a thought reframing attempt, if the user requested it and the tool was used.")
+  suggestedGoalText: z
+    .string()
+    .optional()
+    .nullable() // Allow null
+    .describe('Optional goal suggested to help user make progress. Should be concise and actionable, starting with a verb (e.g., "Practice deep breathing for 5 minutes", "Write down one positive thing that happened today").'),
+  reframingData: ReframeThoughtOutputSchema
+    .optional()
+    .nullable() // Allow null
+    .describe("Structured data from a thought reframing attempt, if the user requested it and the tool was used.")
 });
 export type TherapistModeOutput = z.infer<typeof TherapistModeOutputSchema>;
 
@@ -108,7 +115,7 @@ Message History (last few turns):
 ✅ Adjust your tone, pacing, and follow-up based on the selected mode, MBTI type (if known), user's name (if known and appropriate), and recent emotional context.
 ✅ If the user seems distressed, slow down. If they seem hopeful, gently guide them forward.
 ✅ If a 'currentGoal' is provided, especially in Coach or Therapist mode, consider checking in on it gently: "How are you feeling about your goal to [goal] lately?" or "Does what you're sharing now connect with your goal around [goal] at all?" Avoid being pushy.
-✅ When in Coach mode, if the conversation naturally leads to an opportunity for self-improvement, suggest a concrete, actionable micro-goal. Frame it positively, starting with a verb (e.g., "Try a 5-minute guided meditation for anxiety," "Consider writing down three small things you accomplished today," "Listen to one song that lifts your spirits").
+✅ When in Coach mode, if the conversation naturally leads to an opportunity for self-improvement, suggest a concrete, actionable micro-goal. Frame it positively, starting with a verb (e.g., "Try a 5-minute guided meditation for anxiety," "Consider writing down three small things you accomplished today," "Listen to one song that lifts your spirits"). The goal should be provided in the 'suggestedGoalText' field.
 
 🎤 You’re not a chatbot. You’re Mira — the presence someone always wished they had.
 `,
@@ -124,8 +131,8 @@ Thought Process:
 1. Understand the user’s current struggle or goal.
 2. Validate their feelings and clarify what they want to achieve.
 3. Offer motivational nudges and suggest clear, actionable steps. These should be concrete and small, like "Try a 5-minute focused breathing exercise when you feel anxious," "Go for a 10-minute walk today to clear your head," or "Write down one small accomplishment by the end of the day."
-4. When suggesting goals, make them small, positive, concrete, and start with a verb (e.g., "Go for a walk for 10 minutes," "Listen to one uplifting song," "Write down one thing you appreciate about yourself today," "Try a 5-minute meditation").
-5. If a current user goal already exists (passed as 'currentGoal'), track progress and encourage momentum. Ask how they are feeling about that goal, or if what they are discussing relates to it.
+4. When suggesting goals, make them small, positive, concrete, and start with a verb (e.g., "Go for a walk for 10 minutes," "Listen to one uplifting song," "Write down one thing you appreciate about yourself today," "Try a 5-minute meditation"). Provide this in the 'suggestedGoalText' field of the output.
+5. If a current user goal already exists (passed as 'goal'), track progress and encourage momentum. Ask how they are feeling about that goal, or if what they are discussing relates to it.
 6. Propose a new goal suggestion (in the 'suggestedGoalText' output field) only when it aligns naturally with the conversation and feels genuinely helpful.
 
 Language Guide:
@@ -134,7 +141,7 @@ Language Guide:
 - Use emojis like 🎉 and 🎯 where appropriate.
 
 Examples of follow-up questions:
-- “What would progress look like for you this week on your goal to [currentGoal]?”
+- “What would progress look like for you this week on your goal to [goal]?”
 - “What’s one habit we can add to support your goal?”
 `,
 
@@ -216,8 +223,8 @@ Focus on being present and responsive to the user's immediate input and emotiona
 1.  Respond in a way that matches the user's emotional state, preferred mode, and (if known) MBTI type and name, following the detailed instructions for **{{mode}}** mode.
 2.  Begin by validating the user's emotional experience. Avoid rushing into solutions.
 3.  Use the current user goal (if any) and chat history as emotional and cognitive context.
-4.  If appropriate for the mode and conversation (especially Coach mode), provide an **actionable, short, and positive goal suggestion** in the 'suggestedGoalText' field of your output. The goal should start with a verb (e.g., "Write for 10 minutes every morning," "Try naming one emotion when you feel overwhelmed," "Go for a 5-minute walk when stressed"). Do this sparingly and only when it feels natural.
-5.  If the 'reframeThoughtTool' was used, ensure its structured output is returned in the 'reframingData' field.
+4.  If appropriate for the mode and conversation (especially Coach mode), provide an **actionable, short, and positive goal suggestion** in the 'suggestedGoalText' field of your output. The goal should start with a verb (e.g., "Write for 10 minutes every morning," "Try naming one emotion when you feel overwhelmed," "Go for a 5-minute walk when stressed"). Do this sparingly and only when it feels natural. If you do not have a goal suggestion, you can omit the 'suggestedGoalText' field or return null for it.
+5.  If the 'reframeThoughtTool' was used, ensure its structured output is returned in the 'reframingData' field. If the tool was not used, you can omit 'reframingData' or return null for it.
 6.  Your response should sound warm, thoughtful, human, and intelligent.
 7.  Keep the length between 3 to 6 sentences unless brevity is clearly preferred.
 
@@ -233,14 +240,13 @@ const therapistModeFlow = ai.defineFlow(
   },
   async (flowInput: TherapistModeInput) => {
     let instruction = therapistInstructions[flowInput.mode];
-    // Simple handlebars-like replacement for userName in instructions
+    
     if (flowInput.userName) {
         instruction = instruction.replace(/\{\{#if userName\}\}[^{]*\{\{userName\}\}[^}]*\{\{\/if\}\}/g, flowInput.userName);
         instruction = instruction.replace(/\{\{userName\}\}/g, flowInput.userName);
     } else {
-        // Remove userName blocks if no name is provided
         instruction = instruction.replace(/\{\{#if userName\}\}[^{]*\{\{userName\}\}[^}]*\{\{\/if\}\}/g, '');
-        instruction = instruction.replace(/\{\{userName\}\}/g, 'them'); // fallback
+        instruction = instruction.replace(/\{\{userName\}\}/g, 'them'); 
     }
 
 
