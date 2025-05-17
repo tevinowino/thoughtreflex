@@ -6,15 +6,18 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft } from 'lucide-react';
-import { useAuth, UserProfile } from '@/contexts/auth-context'; // Import UserProfile
+import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2 } from 'lucide-react';
+import { useAuth, UserProfile } from '@/contexts/auth-context'; 
 import { CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { cn } from '@/lib/utils';
-import { getTherapistResponse, TherapistModeInput } from '@/ai/flows/therapist-modes';
+import { getTherapistResponse, TherapistModeInput, AiChatMessage } from '@/ai/flows/therapist-modes';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, addDoc, collection, query, orderBy, onSnapshot, serverTimestamp, Timestamp, setDoc, where, getDocs, limit } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, addDoc, collection, query, orderBy, onSnapshot, serverTimestamp, Timestamp, setDoc, where, getDocs, limit, deleteDoc, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
@@ -30,14 +33,8 @@ interface Message {
 
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
 
-interface AiChatMessage {
-  sender: 'user' | 'ai';
-  text: string;
-}
-
 const MAX_HISTORY_MESSAGES = 10; 
 
-// Helper to get date string in YYYY-MM-DD format
 const getISODateString = (date: Date): string => {
   return date.toISOString().split('T')[0];
 };
@@ -52,10 +49,13 @@ export default function JournalSessionPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sessionTitle, setSessionTitle] = useState('Loading session...');
+  const [editableSessionTitle, setEditableSessionTitle] = useState('');
   const [isLoadingAiResponse, setIsLoadingAiResponse] = useState(false);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   const [currentTherapistMode, setCurrentTherapistMode] = useState<TherapistMode>('Therapist');
   const [currentDbSessionId, setCurrentDbSessionId] = useState<string | null>(initialSessionId === 'new' ? null : initialSessionId);
+  const [isSessionSettingsOpen, setIsSessionSettingsOpen] = useState(false);
+  const [isDeletingSession, setIsDeletingSession] = useState(false);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -70,6 +70,7 @@ export default function JournalSessionPage() {
 
     if (initialSessionId === 'new') {
       setSessionTitle('New Journal Session');
+      setEditableSessionTitle('New Journal Session');
       setMessages([
         { id: '0', text: "Welcome! I'm Mira. I'm here to listen. What's on your mind today?", sender: 'ai', timestamp: new Date(), name: 'Mira', avatar: '/logo-ai.png' },
       ]);
@@ -82,7 +83,9 @@ export default function JournalSessionPage() {
 
       getDoc(sessionDocRef).then(docSnap => {
         if (docSnap.exists()) {
-          setSessionTitle(docSnap.data().title || `Session from ${(docSnap.data().createdAt.toDate() as Date).toLocaleDateString()}`);
+          const title = docSnap.data().title || `Session from ${(docSnap.data().createdAt.toDate() as Date).toLocaleDateString()}`;
+          setSessionTitle(title);
+          setEditableSessionTitle(title);
         } else {
           toast({ title: "Error", description: "Session not found.", variant: "destructive" });
           router.push('/journal');
@@ -124,7 +127,6 @@ export default function JournalSessionPage() {
 
     try {
       const userDocRef = doc(db, 'users', user.uid);
-      // It's important to get the LATEST user profile data from Firestore for streak calculation
       const userDocSnap = await getDoc(userDocRef);
       if (!userDocSnap.exists()) {
         console.error("User profile not found for streak update.");
@@ -135,7 +137,6 @@ export default function JournalSessionPage() {
       const today = new Date();
       const todayDateString = getISODateString(today);
       const lastJournalDateString = userProfile.lastJournalDate || "";
-
 
       if (lastJournalDateString !== todayDateString) {
         let newCurrentStreak = userProfile.currentStreak || 0;
@@ -149,10 +150,10 @@ export default function JournalSessionPage() {
           if (lastJournalDateString === yesterdayDateString) {
             newCurrentStreak += 1;
           } else {
-            newCurrentStreak = 1; // Streak broken or first journal in a while
+            newCurrentStreak = 1; 
           }
         } else {
-          newCurrentStreak = 1; // First journal entry ever
+          newCurrentStreak = 1; 
         }
 
         if (newCurrentStreak > newLongestStreak) {
@@ -165,7 +166,7 @@ export default function JournalSessionPage() {
           lastJournalDate: todayDateString, 
         };
         await updateDoc(userDocRef, streakUpdates);
-        if (refreshUserProfile) { // Refresh user profile in AuthContext
+        if (refreshUserProfile) { 
           await refreshUserProfile();
         }
         toast({ title: "Streak Updated!", description: `You're on a ${newCurrentStreak}-day streak!`, });
@@ -196,15 +197,14 @@ export default function JournalSessionPage() {
     let tempUserMessageId = Date.now().toString();
     setMessages(prev => [...prev, { ...userMessageData, id: tempUserMessageId, timestamp: new Date() } as Message]);
 
-
     try {
       let actualSessionId = currentDbSessionId;
-      let isFirstMessageToday = false; // Flag to check if this is the first message of the day for streak
-
+      
       if (!actualSessionId) {
+        const newSessionTitle = `Journal - ${new Date().toLocaleDateString()}`;
         const sessionColRef = collection(db, 'users', user.uid, 'journalSessions');
         const newSessionDoc = await addDoc(sessionColRef, {
-          title: `Journal - ${new Date().toLocaleDateString()}`,
+          title: newSessionTitle,
           createdAt: serverTimestamp(),
           lastUpdatedAt: serverTimestamp(),
           userId: user.uid,
@@ -213,29 +213,14 @@ export default function JournalSessionPage() {
         actualSessionId = newSessionDoc.id;
         setCurrentDbSessionId(actualSessionId);
         router.replace(`/journal/${actualSessionId}`, { scroll: false });
-        setSessionTitle(`Journal - ${new Date().toLocaleDateString()}`);
-        isFirstMessageToday = true; // New session implies first message of the day for this session context
-      } else {
-        // For existing sessions, we check if this is the first message of *today* to update streak.
-        // This simple check might not be perfect if user jumps between old sessions.
-        // A more robust way is to check the user's lastJournalDate directly.
-        const sessionDocRef = doc(db, 'users', user.uid, 'journalSessions', actualSessionId);
-        const sessionSnap = await getDoc(sessionDocRef);
-        if (sessionSnap.exists()) {
-            const lastUpdated = (sessionSnap.data().lastUpdatedAt as Timestamp).toDate();
-            if (getISODateString(lastUpdated) !== getISODateString(new Date())) {
-                isFirstMessageToday = true;
-            }
-        }
+        setSessionTitle(newSessionTitle);
+        setEditableSessionTitle(newSessionTitle);
       }
-
 
       const userMsgRef = await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), userMessageData);
       setMessages(prev => prev.map(m => m.id === tempUserMessageId ? {...m, id: userMsgRef.id} : m));
       
-      // Call streak update logic. It will internally check if an update is needed for today.
       await handleStreakUpdate();
-
 
       let activeGoalText: string | undefined = undefined;
       if (currentTherapistMode === 'Coach') {
@@ -250,7 +235,6 @@ export default function JournalSessionPage() {
         .slice(-MAX_HISTORY_MESSAGES) 
         .map(msg => ({ sender: msg.sender, text: msg.text }));
       historyForAI.push({ sender: 'user', text: userMessageText });
-
 
       const aiFlowInput: TherapistModeInput = {
         userInput: userMessageText,
@@ -271,18 +255,69 @@ export default function JournalSessionPage() {
       await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), aiMessageData);
 
       await updateDoc(doc(db, 'users', user.uid, 'journalSessions', actualSessionId!), {
-        lastUpdatedAt: serverTimestamp()
+        lastUpdatedAt: serverTimestamp(),
+        ...(messages.length === 0 && { firstMessagePreview: userMessageText.substring(0, 100) }) // Update preview only if it's the first user message
       });
 
     } catch (error: any) {
       console.error("Error sending message or getting AI response:", error);
       toast({ title: "Error", description: error.message || "Could not process message.", variant: "destructive" });
-      setInput(userMessageText);
+      setInput(userMessageText); // Restore input if sending failed
       setMessages(prev => prev.filter(m => m.id !== tempUserMessageId)); 
     } finally {
       setIsLoadingAiResponse(false);
     }
   };
+
+  const handleSaveSessionTitle = async () => {
+    if (!currentDbSessionId || !user || !editableSessionTitle.trim()) {
+      toast({ title: "Error", description: "Cannot save empty title or session not found.", variant: "destructive" });
+      return;
+    }
+    try {
+      const sessionDocRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId);
+      await updateDoc(sessionDocRef, { title: editableSessionTitle.trim() });
+      setSessionTitle(editableSessionTitle.trim());
+      toast({ title: "Session Renamed", description: "The session title has been updated." });
+      setIsSessionSettingsOpen(false);
+    } catch (error) {
+      console.error("Error renaming session:", error);
+      toast({ title: "Error", description: "Could not rename session.", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteSession = async () => {
+    if (!currentDbSessionId || !user) {
+      toast({ title: "Error", description: "Session not found or user not logged in.", variant: "destructive"});
+      return;
+    }
+    setIsDeletingSession(true);
+    try {
+      const sessionDocRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId);
+      const messagesColRef = collection(db, 'users', user.uid, 'journalSessions', currentDbSessionId, 'messages');
+      
+      // Delete all messages in subcollection
+      const messagesSnapshot = await getDocs(messagesColRef);
+      const batch = writeBatch(db);
+      messagesSnapshot.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+
+      // Delete session document
+      await deleteDoc(sessionDocRef);
+
+      toast({ title: "Session Deleted", description: "The session and its messages have been removed." });
+      router.push('/journal');
+    } catch (error) {
+      console.error("Error deleting session:", error);
+      toast({ title: "Error", description: "Could not delete session.", variant: "destructive" });
+    } finally {
+      setIsDeletingSession(false);
+      setIsSessionSettingsOpen(false);
+    }
+  };
+
 
   const modeIcons = {
     Therapist: <Brain className="mr-2 h-4 w-4" />,
@@ -290,7 +325,7 @@ export default function JournalSessionPage() {
     Friend: <Smile className="mr-2 h-4 w-4" />,
   };
 
-  if (authLoading || isLoadingSession && initialSessionId !== 'new') {
+  if (authLoading || (isLoadingSession && initialSessionId !== 'new')) {
      return (
       <div className="flex flex-col h-[calc(100vh-theme(spacing.32))] md:h-[calc(100vh-theme(spacing.24))] bg-card rounded-2xl shadow-xl overflow-hidden items-center justify-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -325,10 +360,57 @@ export default function JournalSessionPage() {
               <SelectItem value="Friend"><div className="flex items-center"><Smile className="mr-2 h-4 w-4" /> Friend</div></SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="ghost" size="icon" onClick={() => toast({title: "Not Implemented", description: "Session settings are not yet available."})}>
-            <Settings2 className="h-5 w-5" />
-            <span className="sr-only">Session Settings</span>
-          </Button>
+          <Dialog open={isSessionSettingsOpen} onOpenChange={setIsSessionSettingsOpen}>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="icon" disabled={!currentDbSessionId} onClick={() => setEditableSessionTitle(sessionTitle)}>
+                <Settings2 className="h-5 w-5" />
+                <span className="sr-only">Session Settings</span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Session Settings</DialogTitle>
+                <DialogDescription>Rename your journal session or delete it.</DialogDescription>
+              </DialogHeader>
+              <div className="py-4 space-y-4">
+                <label htmlFor="sessionTitleInput" className="text-sm font-medium">Session Title</label>
+                <Input
+                  id="sessionTitleInput"
+                  value={editableSessionTitle}
+                  onChange={(e) => setEditableSessionTitle(e.target.value)}
+                  placeholder="Enter session title"
+                />
+              </div>
+              <DialogFooter className="justify-between sm:justify-between">
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" outline disabled={isDeletingSession}>
+                      {isDeletingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                      Delete Session
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete this journal session and all its messages. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDeleteSession} className={cn(buttonVariants({ variant: "destructive" }))}>
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setIsSessionSettingsOpen(false)}>Cancel</Button>
+                  <Button onClick={handleSaveSessionTitle}>Save Title</Button>
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </CardHeader>
 
@@ -412,3 +494,4 @@ export default function JournalSessionPage() {
     </div>
   );
 }
+
