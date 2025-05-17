@@ -1,20 +1,23 @@
 
+// Removed 'use client'; to allow metadata export
+
 import type { Metadata } from 'next';
-import { Inter, Caveat } from 'next/font/google'; // Import Caveat
+import { Inter, Caveat } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/contexts/auth-context';
 import { Toaster } from '@/components/ui/toaster';
 import { ThemeProvider } from '@/components/theme-provider';
+import ServiceWorkerRegistrar from '@/components/app/service-worker-registrar'; // New component
 
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
 });
 
-const caveat = Caveat({ // Configure Caveat font
+const caveat = Caveat({
   subsets: ['latin'],
   variable: '--font-caveat',
-  weight: ['400', '700'], // Specify weights you'll use
+  weight: ['400', '700'],
 });
 
 export const metadata: Metadata = {
@@ -29,7 +32,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} ${caveat.variable} font-sans antialiased`}> {/* Add caveat.variable */}
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#3C4A6B" />
+        {/* Apple specific PWA meta tags */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="ThoughtReflex" />
+        {/* You would add actual apple-touch-icon links here if you have them */}
+        {/* e.g., <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"> */}
+      </head>
+      <body className={`${inter.variable} ${caveat.variable} font-sans antialiased`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -39,6 +52,7 @@ export default function RootLayout({
           <AuthProvider>
             {children}
             <Toaster />
+            <ServiceWorkerRegistrar /> {/* Add the client component here */}
           </AuthProvider>
         </ThemeProvider>
       </body>
