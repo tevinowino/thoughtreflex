@@ -8,27 +8,38 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth, UserProfile } from '@/contexts/auth-context';
-import { UserCircle, Bell, Palette, ShieldCheck, LogOut, Brain, Zap, Smile } from 'lucide-react';
+import { UserCircle, Bell, Palette, ShieldCheck, LogOut, Brain, Zap, Smile, Image as ImageIcon, UserSquare2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { useTheme } from 'next-themes'; // For dark mode toggle visual
+import { useTheme } from 'next-themes'; 
+import { cn } from '@/lib/utils';
 
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
+
+const avatarOptions = [
+  { id: 'avatar1', name: 'Character 1', url: 'https://placehold.co/100x100.png?text=Ava1', hint: 'character playful' },
+  { id: 'avatar2', name: 'Character 2', url: 'https://placehold.co/100x100.png?text=Ava2', hint: 'character serious' },
+  { id: 'avatar3', name: 'Character 3', url: 'https://placehold.co/100x100.png?text=Ava3', hint: 'character calm' },
+  { id: 'avatar4', name: 'Character 4', url: 'https://placehold.co/100x100.png?text=Ava4', hint: 'character joyful' },
+  { id: 'no_avatar', name: 'No Avatar', url: '', hint: 'abstract user'}
+];
+
 
 export default function SettingsPage() {
   const { user, signOut, updateUserProfile, loading: authLoading } = useAuth();
   const { toast } = useToast();
-  const { theme, setTheme } = useTheme(); // For dark mode switch visual consistency
+  const { theme, setTheme } = useTheme();
 
   const [displayName, setDisplayName] = useState(user?.displayName || '');
-  const [email] = useState(user?.email || ''); // Email is not editable
+  const [email] = useState(user?.email || '');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true); // Mocked
   const [defaultTherapistMode, setDefaultTherapistMode] = useState<TherapistMode>(user?.defaultTherapistMode || 'Therapist');
+  const [selectedAvatarUrl, setSelectedAvatarUrl] = useState(user?.photoURL || '');
   const [isSaving, setIsSaving] = useState(false);
   
-  // Reflect dark mode toggle based on actual theme
   const [darkModeVisual, setDarkModeVisual] = useState(false);
   useEffect(() => {
     setDarkModeVisual(theme === 'dark');
@@ -39,6 +50,7 @@ export default function SettingsPage() {
     if (user) {
       setDisplayName(user.displayName || '');
       setDefaultTherapistMode(user.defaultTherapistMode || 'Therapist');
+      setSelectedAvatarUrl(user.photoURL || '');
     }
   }, [user]);
 
@@ -56,7 +68,9 @@ export default function SettingsPage() {
       if (defaultTherapistMode !== user.defaultTherapistMode) {
         profileUpdates.defaultTherapistMode = defaultTherapistMode;
       }
-      // Note: notificationsEnabled and darkMode are local/mocked for now
+      if (selectedAvatarUrl !== (user.photoURL || '')) {
+        profileUpdates.photoURL = selectedAvatarUrl === '' ? null : selectedAvatarUrl; // Store null if "No Avatar"
+      }
 
       if (Object.keys(profileUpdates).length > 0) {
         await updateUserProfile(profileUpdates);
@@ -124,6 +138,45 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Card className="shadow-lg rounded-2xl">
+        <CardHeader>
+            <CardTitle className="flex items-center gap-2"><UserSquare2 className="h-6 w-6 text-primary" /> Choose Your Avatar</CardTitle>
+            <CardDescription>Select an avatar to represent you in the app.</CardDescription>
+        </CardHeader>
+        <CardContent>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 p-2 rounded-lg bg-muted/30">
+            {avatarOptions.map(avatar => (
+                <button
+                key={avatar.id}
+                onClick={() => setSelectedAvatarUrl(avatar.url)}
+                className={cn(
+                    "flex flex-col items-center p-2 rounded-lg transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background",
+                    selectedAvatarUrl === avatar.url ? "ring-2 ring-primary bg-primary/10" : "hover:bg-primary/5"
+                )}
+                aria-label={`Select avatar ${avatar.name}`}
+                >
+                {avatar.url ? (
+                     <Image 
+                        src={avatar.url} 
+                        alt={avatar.name} 
+                        width={64} 
+                        height={64} 
+                        className="rounded-full object-cover w-16 h-16"
+                        data-ai-hint={avatar.hint}
+                    />
+                ) : (
+                    <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
+                        <UserCircle className="w-8 h-8 text-secondary-foreground" />
+                    </div>
+                )}
+                <span className="text-xs mt-1 text-center text-foreground/80 truncate w-full">{avatar.name}</span>
+                </button>
+            ))}
+            </div>
+        </CardContent>
+      </Card>
+
 
       <Card className="shadow-lg rounded-2xl">
         <CardHeader>
@@ -195,7 +248,7 @@ export default function SettingsPage() {
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign Out
             </Button>
-             <Button variant="destructive" outline className="w-full md:w-auto" onClick={() => toast({title: "Action Not Implemented", description:"Account deletion is not yet available.", variant: "destructive"})}>
+             <Button variant="destructive" outline onClick={() => toast({title: "Action Not Implemented", description:"Account deletion is not yet available.", variant: "destructive"})}>
                 Delete Account
             </Button>
         </CardContent>
