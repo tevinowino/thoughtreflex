@@ -1,7 +1,7 @@
 
 # ThoughtReflex - Your AI-Powered Therapy Journal
 
-ThoughtReflex is a web application designed to be your personal AI-powered therapist and emotional journal. It provides a safe, intelligent, and reflective space for users to explore their thoughts and emotions, fostering self-awareness and promoting mental well-being.
+ThoughtReflex is a web application designed to be your personal AI-powered therapist and emotional journal. It provides a safe, intelligent, and reflective space for users to explore their thoughts and emotions, fostering self-awareness and promoting mental well-being. It's also installable as a Progressive Web App (PWA) for a more app-like experience.
 
 **Reflect deeply. Heal gently.**
 
@@ -10,11 +10,16 @@ ThoughtReflex is a web application designed to be your personal AI-powered thera
 *   **AI-Powered Journaling (Mira)**: Engage in empathetic, chat-based conversations with Mira, your AI companion. Mira is designed to help you explore and understand your feelings.
     *   **Contextual AI Conversations**: Mira remembers the flow of your current journaling session, providing relevant follow-ups and maintaining context within the active chat.
     *   **AI-Suggested Goals**: During your journaling sessions, Mira may suggest actionable goals for self-improvement based on your conversation. You can easily add these to your goal list.
+    *   **AI-Powered Thought Reframing (Mind Shift Tool)**: When explicitly asked, Mira can help you identify and reframe negative thought patterns using cognitive restructuring principles.
 *   **Adaptive Therapist Modes**: Tailor Mira's interaction style to your current needs by choosing between:
     *   **Therapist Mode**: For deep, reflective, and slow-paced conversations.
     *   **Coach Mode**: For motivational, structured guidance, helping you work towards your goals.
     *   **Friend Mode**: For casual, warm, and supportive conversations.
-*   **Traditional Notebook**: A private, non-AI space for your unfiltered thoughts, free-writing, or quick notes. Create, edit, and delete entries as you wish.
+*   **Traditional Notebook**: A private, non-AI space for your unfiltered thoughts, free-writing, or quick notes.
+    *   **Rich Text Features**: Includes word/character count and a "last saved" indicator.
+    *   **Handwriting Font**: Content area uses a handwriting-style font for a more personal feel.
+    *   **Search & Filter**: Easily find entries by searching titles and content.
+    *   **Clear Entry**: Option to quickly clear the content of an entry.
 *   **Goal Setting & Tracking**: Define, manage, and track your personal healing and growth milestones. Mark goals as complete and edit them as needed. Mira can reference your active goals in "Coach" mode.
 *   **Dynamic Weekly AI Recaps**: At the end of each week (or when you choose to generate it), ThoughtReflex creates a personalized summary of your journal entries from the past seven days. Mira identifies emotional trends, victories, and struggles from your actual writings. View individual recaps in detail.
 *   **Personalized Insights Page**: Uncover deeper patterns in your emotional landscape with dynamically generated insights based on your recent activity:
@@ -35,9 +40,13 @@ ThoughtReflex is a web application designed to be your personal AI-powered thera
     *   Change your account password.
     *   **Export Your Data**: Download all your personal data (profile, goals, journal sessions with messages, notebook entries, weekly recaps) in JSON format.
     *   **Delete Your Data**: Option to delete all your application data (journals, goals, recaps, notebook entries, profile settings within the app) while keeping your login account active, allowing for a fresh start.
+*   **Feedback System**:
+    *   Users can submit testimonials and star ratings.
+    *   Approved testimonials are dynamically displayed on the landing page.
+*   **Progressive Web App (PWA)**: Install ThoughtReflex on your device for an app-like experience, starting directly at your dashboard.
 *   **Theme Customization**: Easily switch between light and dark modes for a comfortable viewing experience.
 *   **Privacy Focused**: Clear privacy reminders are integrated throughout the app, assuring users that their entries are confidential.
-*   **Responsive Design**: Enjoy a seamless experience across desktop, tablet,and mobile devices.
+*   **Responsive Design**: Enjoy a seamless and aesthetically pleasing experience across desktop, tablet,and mobile devices, with friendly animations and scrolling effects.
 
 ## Technology Stack
 
@@ -48,6 +57,7 @@ ThoughtReflex is a web application designed to be your personal AI-powered thera
 *   **Styling**:
     *   Tailwind CSS
     *   ShadCN UI Components
+    *   Framer Motion (for animations)
 *   **Backend & Database**:
     *   Firebase (Authentication, Firestore for data persistence)
 *   **Artificial Intelligence**:
@@ -74,7 +84,7 @@ Follow these instructions to get a local copy of ThoughtReflex up and running fo
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://your-repository-url/thoughtreflex.git
+    git clone https://your-repository-url/thoughtreflex.git # Replace with your actual repo URL
     cd thoughtreflex
     ```
 
@@ -168,10 +178,12 @@ service cloud.firestore {
       allow read, write, delete: if request.auth != null && request.auth.uid == userId;
     }
     
-    // (Optional) Insights subcollection - if you decide to persist generated insights
-    // match /users/{userId}/insights/{insightDocId} {
-    //   allow read, write, delete: if request.auth != null && request.auth.uid == userId;
-    // }
+    // Testimonials collection (publicly readable if approved and consent given, writable by authenticated users)
+    match /testimonials/{testimonialId} {
+      allow read: if resource.data.isApproved == true && resource.data.consentGiven == true;
+      allow create: if request.auth != null;
+      // Admin/moderator would need separate rules for update (e.g., to set isApproved)
+    }
   }
 }
 ```
@@ -192,7 +204,13 @@ In the project directory, you can run:
 
 ```
 /
-├── public/                 # Static assets (like Mira's avatar logo-ai.png)
+├── public/                 # Static assets (Mira's avatar logo-ai.png, manifest.json, sw.js, avatars, images)
+│   ├── avatars/
+│   ├── icons/              # PWA icons
+│   └── images/             # General marketing/static images
+│       ├── about/
+│       └── careers/
+│       └── ...
 ├── src/
 │   ├── ai/                 # Genkit AI flows and configuration
 │   │   ├── flows/          # Individual AI flow implementations
@@ -201,6 +219,7 @@ In the project directory, you can run:
 │   ├── app/                # Next.js App Router pages and layouts
 │   │   ├── (app)/          # Authenticated app routes (dashboard, journal, etc.)
 │   │   │   ├── dashboard/
+│   │   │   ├── feedback/
 │   │   │   ├── goals/
 │   │   │   ├── insights/
 │   │   │   ├── journal/
@@ -229,7 +248,7 @@ In the project directory, you can run:
 │   │   ├── layout.tsx      # Root layout
 │   │   └── page.tsx        # Landing page
 │   ├── components/
-│   │   ├── app/            # Components specific to the authenticated app (header, sidebar, nav)
+│   │   ├── app/            # Components specific to the authenticated app (header, sidebar, nav, service-worker-registrar)
 │   │   ├── auth/           # Authentication-related components (forms, OAuth buttons)
 │   │   ├── landing/        # Components for the landing page
 │   │   ├── ui/             # ShadCN UI components (Button, Card, etc.)
@@ -255,15 +274,16 @@ In the project directory, you can run:
 ## Future Enhancements (Potential Next Steps)
 
 *   **Deeper AI Memory**: Implement long-term memory for Mira across sessions by storing and retrieving key user insights or summaries.
-*   **Advanced Insights**: More sophisticated data analysis and visualizations on the Insights page.
+*   **Admin Panel**: For testimonial approval and other administrative tasks.
 *   **Persistent Insights**: Save generated insights (emotion trends, themes) to Firestore to avoid re-generation on every page visit and allow for historical tracking.
+*   **Advanced PWA Features**: More robust offline caching, background sync using service workers.
 *   **Notifications**: Reminders for journaling or goal check-ins (e.g., using Firebase Cloud Messaging).
 *   **Voice Input**: Allow users to speak their journal entries.
 *   **File Attachments**: Allow users to attach relevant files/images to journal entries.
 *   **Mood Tracking**: Dedicated mood tracking features, perhaps with daily check-ins.
-*   **More AI Tools**: Potentially add AI tools for specific therapeutic exercises (e.g., Cognitive Behavioral Therapy techniques, guided mindfulness).
+*   **More AI Tools**: Potentially add AI tools for specific therapeutic exercises (e.g., guided mindfulness).
 *   **Enhanced Error Handling & Loading States**: Further refinement for a smoother user experience.
-*   **Full Account Deletion (Server-Side)**: For robust account deletion, implement a Firebase Function triggered on user deletion from Auth to clean up all Firestore data.
+*   **Full Account Deletion (Server-Side)**: For robust account deletion (including Firebase Auth record), implement a Firebase Function triggered on user deletion from Auth to clean up all Firestore data.
 
 ---
 
