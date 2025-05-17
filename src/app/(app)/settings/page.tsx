@@ -8,39 +8,67 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth, UserProfile } from '@/contexts/auth-context';
-import { UserCircle, Bell, Palette, ShieldCheck, LogOut, Brain, Zap, Smile, Image as ImageIcon, UserSquare2 } from 'lucide-react';
+import { UserCircle, Bell, Palette, ShieldCheck, LogOut, Brain, Zap, Smile, Image as ImageIcon, UserSquare2, Trash2, Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, FormEvent } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useTheme } from 'next-themes'; 
 import { cn } from '@/lib/utils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader as ReauthDialogHeader, // Alias to avoid conflict
+  DialogTitle as ReauthDialogTitle,
+  DialogDescription as ReauthDialogDescription,
+  DialogFooter as ReauthDialogFooter,
+} from "@/components/ui/dialog";
+import { EmailAuthProvider } from 'firebase/auth';
+
 
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
 
 const avatarOptions = [
-  { id: 'avatar1', name: 'Character 1', url: 'https://placehold.co/100x100.png?text=Ava1', hint: 'character playful' },
-  { id: 'avatar2', name: 'Character 2', url: 'https://placehold.co/100x100.png?text=Ava2', hint: 'character serious' },
-  { id: 'avatar3', name: 'Character 3', url: 'https://placehold.co/100x100.png?text=Ava3', hint: 'character calm' },
-  { id: 'avatar4', name: 'Character 4', url: 'https://placehold.co/100x100.png?text=Ava4', hint: 'character joyful' },
+  { id: 'avatar1', name: 'Character 1', url: 'https://placehold.co/100x100.png', hint: 'character playful' },
+  { id: 'avatar2', name: 'Character 2', url: 'https://placehold.co/100x100.png', hint: 'character serious' },
+  { id: 'avatar3', name: 'Character 3', url: 'https://placehold.co/100x100.png', hint: 'character calm' },
+  { id: 'avatar4', name: 'Character 4', url: 'https://placehold.co/100x100.png', hint: 'character joyful' },
   { id: 'no_avatar', name: 'No Avatar', url: '', hint: 'abstract user'}
 ];
 
 
 export default function SettingsPage() {
-  const { user, signOut, updateUserProfile, loading: authLoading } = useAuth();
+  const { user, signOut, updateUserProfile, loading: authLoading, deleteUserData, error: authError } = useAuth();
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
 
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [email] = useState(user?.email || '');
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true); // Mocked
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true); 
   const [defaultTherapistMode, setDefaultTherapistMode] = useState<TherapistMode>(user?.defaultTherapistMode || 'Therapist');
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState(user?.photoURL || '');
   const [isSaving, setIsSaving] = useState(false);
   
   const [darkModeVisual, setDarkModeVisual] = useState(false);
+
+  const [isDeletingData, setIsDeletingData] = useState(false);
+  const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
+  const [isPasswordPromptOpen, setIsPasswordPromptOpen] = useState(false);
+  const [passwordForDelete, setPasswordForDelete] = useState('');
+  
+
   useEffect(() => {
     setDarkModeVisual(theme === 'dark');
   }, [theme]);
@@ -68,9 +96,12 @@ export default function SettingsPage() {
       if (defaultTherapistMode !== user.defaultTherapistMode) {
         profileUpdates.defaultTherapistMode = defaultTherapistMode;
       }
-      if (selectedAvatarUrl !== (user.photoURL || '')) {
-        profileUpdates.photoURL = selectedAvatarUrl === '' ? null : selectedAvatarUrl; // Store null if "No Avatar"
+      // Handle empty string for photoURL correctly (store as null)
+      const newPhotoURL = selectedAvatarUrl === '' ? null : selectedAvatarUrl;
+      if (newPhotoURL !== (user.photoURL || null)) {
+          profileUpdates.photoURL = newPhotoURL;
       }
+
 
       if (Object.keys(profileUpdates).length > 0) {
         await updateUserProfile(profileUpdates);
@@ -94,6 +125,51 @@ export default function SettingsPage() {
   const handleThemeChange = (checked: boolean) => {
     setTheme(checked ? 'dark' : 'light');
     setDarkModeVisual(checked);
+  };
+
+  const handleDeleteDataConfirmed = async () => {
+    if (!user || !auth.currentUser) return;
+    
+    // Check provider type
+    const isEmailProvider = auth.currentUser.providerData.some(
+      (provider) => provider.providerId === EmailAuthProvider.PROVIDER_ID
+    );
+
+    if (isEmailProvider) {
+      setIsPasswordPromptOpen(true); // Open password prompt dialog
+    } else {
+      // For Google or other OAuth providers, proceed directly to data deletion with re-auth popup
+      await handleFinalDelete();
+    }
+  };
+
+  const handleFinalDelete = async (e?: FormEvent) => {
+    e?.preventDefault(); // Prevent form submission if called from form
+    if (!user) return;
+
+    setIsDeletingData(true);
+    setIsPasswordPromptOpen(false); // Close password prompt if open
+
+    try {
+      await deleteUserData(passwordForDelete || undefined); // Pass password if it was entered
+      toast({
+        title: "Data Deleted Successfully",
+        description: "All your personal data has been removed. Your account is still active.",
+      });
+      // Optionally, refresh user state or redirect
+      // router.push('/dashboard'); 
+    } catch (error: any) {
+      console.error("Data deletion error:", error);
+      toast({
+        title: "Data Deletion Failed",
+        description: error.message || "Could not delete your data. Please try re-logging in.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingData(false);
+      setPasswordForDelete('');
+      setIsDeleteConfirmationOpen(false); // Ensure main confirmation is closed
+    }
   };
 
 
@@ -227,6 +303,7 @@ export default function SettingsPage() {
       </Card>
        <div className="flex justify-end">
          <Button onClick={handleSaveChanges} disabled={isSaving || authLoading}>
+            {isSaving ? <Loader2 className="animate-spin"/> : null}
             {isSaving ? 'Saving...' : 'Save All Changes'}
           </Button>
        </div>
@@ -248,11 +325,71 @@ export default function SettingsPage() {
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign Out
             </Button>
-             <Button variant="destructive" outline onClick={() => toast({title: "Action Not Implemented", description:"Account deletion is not yet available.", variant: "destructive"})}>
-                Delete Account
-            </Button>
+            <AlertDialog open={isDeleteConfirmationOpen} onOpenChange={setIsDeleteConfirmationOpen}>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" className={cn("bg-red-600 hover:bg-red-700 text-white")} onClick={() => setIsDeleteConfirmationOpen(true)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete My Data
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete All Your Data?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action will permanently delete all your personal data, including journals, goals, and recaps.
+                    Your account login will remain, but your app data will be reset. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel onClick={() => setIsDeleteConfirmationOpen(false)}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteDataConfirmed}
+                    disabled={isDeletingData}
+                    className={cn(Button({variant:"destructive"}))}
+                  >
+                    {isDeletingData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Yes, Delete My Data
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Password Prompt Dialog */}
+            <Dialog open={isPasswordPromptOpen} onOpenChange={setIsPasswordPromptOpen}>
+                <DialogContent>
+                    <form onSubmit={handleFinalDelete}>
+                        <ReauthDialogHeader>
+                            <ReauthDialogTitle>Re-authenticate to Delete Data</ReauthDialogTitle>
+                            <ReauthDialogDescription>
+                                For your security, please enter your current password to confirm data deletion.
+                            </ReauthDialogDescription>
+                        </ReauthDialogHeader>
+                        <div className="py-4">
+                            <Label htmlFor="passwordForDelete">Current Password</Label>
+                            <Input
+                                id="passwordForDelete"
+                                type="password"
+                                value={passwordForDelete}
+                                onChange={(e) => setPasswordForDelete(e.target.value)}
+                                required
+                            />
+                             {authError && authError.code === 'auth/wrong-password' && <p className="text-sm text-destructive mt-1">Incorrect password.</p>}
+                        </div>
+                        <ReauthDialogFooter>
+                            <Button type="button" variant="outline" onClick={() => { setIsPasswordPromptOpen(false); setPasswordForDelete('');}}>Cancel</Button>
+                            <Button type="submit" variant="destructive" disabled={isDeletingData}>
+                                {isDeletingData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Confirm & Delete Data
+                            </Button>
+                        </ReauthDialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
         </CardContent>
       </Card>
     </div>
   );
 }
+
+    

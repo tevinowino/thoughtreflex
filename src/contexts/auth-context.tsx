@@ -12,8 +12,12 @@ import {
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   updateProfile as updateFirebaseProfile,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+  reauthenticateWithPopup,
+  // deleteUser, // No longer deleting the auth user
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, Timestamp, collection, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 
 export interface UserProfile {
@@ -36,7 +40,8 @@ interface AuthContextType {
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateUserProfile: (details: Partial<UserProfile>) => Promise<void>;
-  refreshUserProfile: () => Promise<void>; // Added for manual refresh if needed
+  refreshUserProfile: () => Promise<void>;
+  deleteUserData: (currentPassword?: string) => Promise<void>; // Renamed
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,8 +58,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (userDocSnap.exists()) {
       setUser(userDocSnap.data() as UserProfile);
     } else {
-      // This case should ideally be handled during sign-up/sign-in
-      // For Google Sign-in, it creates the profile on first login
       const newUserProfile: UserProfile = {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
@@ -91,7 +94,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-
   const handleAuthSuccess = async (firebaseUser: FirebaseUser, displayNameParam?: string) => {
     const userDocRef = doc(db, 'users', firebaseUser.uid);
     const userDocSnap = await getDoc(userDocRef);
@@ -99,17 +101,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     if (userDocSnap.exists()) {
       userProfileData = userDocSnap.data() as UserProfile;
-      // Update with latest from FirebaseUser if necessary, especially for Google sign-ins
       userProfileData = {
-        ...userProfileData, // Keep existing custom fields
+        ...userProfileData,
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         displayName: displayNameParam || firebaseUser.displayName || userProfileData.displayName,
         photoURL: firebaseUser.photoURL || userProfileData.photoURL,
-        // Ensure streak fields are initialized if they don't exist
         currentStreak: userProfileData.currentStreak || 0,
         longestStreak: userProfileData.longestStreak || 0,
         lastJournalDate: userProfileData.lastJournalDate || '',
+        defaultTherapistMode: userProfileData.defaultTherapistMode || 'Therapist',
       };
     } else {
       userProfileData = {
@@ -130,7 +131,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
      if (firebaseUser.photoURL && auth.currentUser && auth.currentUser.photoURL !== firebaseUser.photoURL) {
       await updateFirebaseProfile(auth.currentUser, { photoURL: firebaseUser.photoURL });
     }
-
 
     await setDoc(userDocRef, userProfileData, { merge: true });
     setUser(userProfileData);
@@ -207,12 +207,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (details.displayName && details.displayName !== auth.currentUser.displayName) {
         await updateFirebaseProfile(auth.currentUser, { displayName: details.displayName });
       }
-      if (details.photoURL && details.photoURL !== auth.currentUser.photoURL) {
+      if (details.photoURL !== undefined && details.photoURL !== auth.currentUser.photoURL) { // Check for undefined to allow clearing photoURL
          await updateFirebaseProfile(auth.currentUser, { photoURL: details.photoURL });
       }
 
       await updateDoc(userDocRef, details);
-      // Fetch the updated profile to ensure local state is consistent
       const updatedDocSnap = await getDoc(userDocRef);
       if (updatedDocSnap.exists()) {
         setUser(updatedDocSnap.data() as UserProfile);
@@ -226,8 +225,91 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const deleteUserData = async (currentPassword?: string) => {
+    if (!user || !auth.currentUser) {
+      throw new Error('No user is currently signed in.');
+    }
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Re-authenticate user
+      const currentUser = auth.currentUser;
+      if (currentUser.providerData.some(p => p.providerId === EmailAuthProvider.PROVIDER_ID)) {
+        if (!currentPassword) {
+          throw new Error('Current password is required for re-authentication.');
+        }
+        const credential = EmailAuthProvider.credential(currentUser.email!, currentPassword);
+        await reauthenticateWithCredential(currentUser, credential);
+      } else if (currentUser.providerData.some(p => p.providerId === GoogleAuthProvider.PROVIDER_ID)) {
+        const provider = new GoogleAuthProvider();
+        await reauthenticateWithPopup(currentUser, provider);
+      } else {
+        throw new Error('Re-authentication method not supported for this user.');
+      }
+
+      // Delete Firestore data
+      const batch = writeBatch(db);
+      const collectionsToDelete = ['goals', 'journalSessions', 'notebookEntries', 'weeklyRecaps'];
+
+      for (const collName of collectionsToDelete) {
+        const collRef = collection(db, 'users', user.uid, collName);
+        const snapshot = await getDocs(collRef);
+        snapshot.forEach(async (docSnap) => {
+          // For journalSessions, delete messages subcollection first
+          if (collName === 'journalSessions') {
+            const messagesCollRef = collection(db, 'users', user.uid, 'journalSessions', docSnap.id, 'messages');
+            const messagesSnapshot = await getDocs(messagesCollRef);
+            messagesSnapshot.forEach(msgDoc => batch.delete(msgDoc.ref));
+          }
+          batch.delete(docSnap.ref);
+        });
+      }
+      
+      // Delete the main user profile document
+      const userDocRef = doc(db, 'users', user.uid);
+      batch.delete(userDocRef);
+
+      await batch.commit(); // Commit all batched deletes
+
+      // Re-initialize user profile in Firestore
+      const freshUserProfile: UserProfile = {
+        uid: currentUser.uid,
+        email: currentUser.email,
+        displayName: currentUser.displayName,
+        photoURL: currentUser.photoURL,
+        defaultTherapistMode: 'Therapist',
+        currentStreak: 0,
+        longestStreak: 0,
+        lastJournalDate: '',
+      };
+      await setDoc(userDocRef, freshUserProfile);
+      setUser(freshUserProfile); // Update local state with the fresh profile
+      
+      // router.push('/dashboard'); // Optionally navigate, or let them stay on settings
+
+    } catch (err) {
+      handleAuthError(err as AuthError);
+      throw err; // Re-throw to be caught by the calling component
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
   return (
-    <AuthContext.Provider value={{ user, loading, error, signInWithGoogle, signUpWithEmail, signInWithEmail, signOut, updateUserProfile, refreshUserProfile }}>
+    <AuthContext.Provider value={{ 
+        user, 
+        loading, 
+        error, 
+        signInWithGoogle, 
+        signUpWithEmail, 
+        signInWithEmail, 
+        signOut, 
+        updateUserProfile, 
+        refreshUserProfile,
+        deleteUserData // Updated function name
+    }}>
       {children}
     </AuthContext.Provider>
   );
@@ -240,3 +322,5 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
+
+    
