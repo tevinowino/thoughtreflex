@@ -67,7 +67,7 @@ export default function JournalSessionPage() {
     if (initialSessionId === 'new') {
       setSessionTitle('New Journal Session');
       setMessages([
-        { id: '0', text: "Welcome! I'm here to listen. What's on your mind today?", sender: 'ai', timestamp: new Date(), name: 'ThoughtReflex AI', avatar: '/logo-ai.png' },
+        { id: '0', text: "Welcome! I'm Mira. I'm here to listen. What's on your mind today?", sender: 'ai', timestamp: new Date(), name: 'Mira', avatar: '/logo-ai.png' },
       ]);
       setIsLoadingSession(false);
       setCurrentDbSessionId(null); 
@@ -127,7 +127,7 @@ export default function JournalSessionPage() {
       sender: 'user',
       timestamp: serverTimestamp(),
       name: user.displayName || 'User',
-      avatar: user.photoURL || null, // Ensure null if photoURL is falsy
+      avatar: user.photoURL || null, 
     };
 
     setIsLoadingAiResponse(true);
@@ -187,7 +187,7 @@ export default function JournalSessionPage() {
         text: aiResponse.response,
         sender: 'ai',
         timestamp: serverTimestamp(),
-        name: 'ThoughtReflex AI',
+        name: 'Mira',
         avatar: '/logo-ai.png',
       };
       await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), aiMessageData);
@@ -254,7 +254,7 @@ export default function JournalSessionPage() {
         </div>
       </CardHeader>
 
-      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}> {/* Removed space-y-4 */}
+      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         {messages.map((msg) => (
           <div
             key={msg.id}
@@ -293,7 +293,7 @@ export default function JournalSessionPage() {
               <AvatarFallback><Brain className="h-4 w-4" /></AvatarFallback>
             </Avatar>
             <div className="px-4 py-3 rounded-2xl shadow-md bg-muted text-foreground rounded-bl-none">
-              <p className="text-sm italic">AI is thinking...</p>
+              <p className="text-sm italic">Mira is thinking...</p>
             </div>
           </div>
         )}
