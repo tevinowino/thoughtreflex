@@ -47,11 +47,11 @@ const getISODateString = (date: Date): string => {
 };
 
 export default function JournalSessionPage() {
-  const rawParams = useParams();
-  const params = { ...rawParams }; // Shallow copy to avoid enumeration issues
+  const routeParams = useParams();
+  const safeParams = { ...routeParams }; 
   const router = useRouter();
   const { toast } = useToast();
-  const initialSessionId = params.sessionId as string;
+  const initialSessionId = safeParams.sessionId as string;
 
   const { user, loading: authLoading, refreshUserProfile } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -253,6 +253,7 @@ export default function JournalSessionPage() {
         goal: activeGoalText,
         messageHistory: historyForAI,
         mbtiType: user?.mbtiType,
+        userName: user.displayName || undefined,
       };
 
       const aiResponse = await getTherapistResponse(aiFlowInput);
@@ -481,8 +482,8 @@ export default function JournalSessionPage() {
         </div>
       </CardHeader>
 
-      <ScrollArea className="flex-1 p-4" viewportRef={viewportRef} ref={scrollAreaRef}>
-        <div className="space-y-0">
+      <ScrollArea className="flex-1" viewportRef={viewportRef} ref={scrollAreaRef}>
+        <div className="space-y-0 p-4"> {/* Removed space-y-4 from here */}
         {messages.map((msg) => (
           <motion.div
             key={msg.id}
@@ -490,7 +491,7 @@ export default function JournalSessionPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, ease: "easeOut" }}
             className={cn(
-              "group flex items-end gap-2 max-w-[85%] sm:max-w-[75%] mb-4", 
+              "group flex items-end gap-2 max-w-[85%] sm:max-w-[75%] mb-4", // Added mb-4 here
               msg.sender === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
             )}
           >
@@ -502,53 +503,61 @@ export default function JournalSessionPage() {
             </Avatar>
             <div
               className={cn(
-                "px-3 py-2 sm:px-4 sm:py-3 rounded-2xl shadow-md group-hover:shadow-lg transition-shadow duration-200 ease-in-out text-sm", 
+                "px-3 py-2 sm:px-4 sm:py-3 rounded-2xl shadow-md group-hover:shadow-xl transition-shadow duration-200 ease-in-out text-sm", 
                 msg.sender === 'user'
                   ? 'bg-primary text-primary-foreground rounded-br-lg'
                   : 'bg-muted text-foreground rounded-bl-lg'
               )}
             >
               <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
-               {msg.sender === 'ai' && msg.suggestedGoalText && !msg.isGoalAdded && (
-                <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-foreground/20">
-                  <p className="text-xs font-semibold text-foreground/80 mb-1 sm:mb-1.5">Mira's Goal Suggestion:</p>
+               {msg.sender === 'ai' && msg.suggestedGoalText && (
+                <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    transition={{ duration: 0.3, delay: 0.2, ease: "easeOut" }}
+                    className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-primary/30 bg-accent/10 p-2.5 sm:p-3 rounded-md"
+                >
+                  <p className="text-xs font-semibold text-primary/90 mb-1 sm:mb-1.5">Mira's Goal Suggestion:</p>
                   <p className="text-xs sm:text-sm text-foreground/90 italic mb-1.5 sm:mb-2">"{msg.suggestedGoalText}"</p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-xs h-auto py-1 px-2 sm:py-1.5 sm:px-3 bg-background hover:bg-accent border-primary/30 text-primary hover:text-primary"
-                    onClick={() => handleAddSuggestedGoal(msg.id, msg.suggestedGoalText!)}
-                  >
-                    <PlusCircle className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" /> Add this goal
-                  </Button>
-                </div>
-              )}
-              {msg.sender === 'ai' && msg.suggestedGoalText && msg.isGoalAdded && (
-                  <div className="mt-2 sm:mt-3 pt-1.5 sm:pt-2 border-t border-green-600/30 dark:border-green-400/30">
-                      <p className="text-xs text-green-600 dark:text-green-400 flex items-center font-medium">
-                        <CheckCircle className="mr-1 sm:mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Goal added!
-                      </p>
-                  </div>
-              )}
-              {msg.sender === 'ai' && msg.reframingData && !msg.isReframingSaved && (
-                  <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-purple-500/30">
-                    <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mb-1.5">Mira's Mind Shift Suggestion:</p>
+                  {!msg.isGoalAdded ? (
                     <Button
                         size="sm"
                         variant="outline"
-                        className="text-xs h-auto py-1 px-2 sm:py-1.5 sm:px-3 bg-background hover:bg-accent border-purple-500/50 text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300"
-                        onClick={() => handleSaveMindShift(msg.id, msg.reframingData!)}
+                        className="text-xs h-auto py-1 px-2 sm:py-1.5 sm:px-3 border-primary/50 text-primary hover:bg-primary/10 hover:text-primary"
+                        onClick={() => handleAddSuggestedGoal(msg.id, msg.suggestedGoalText!)}
                     >
-                       <Save className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" /> Save this Mind Shift
+                        <PlusCircle className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" /> Add this goal
                     </Button>
-                  </div>
-              )}
-              {msg.sender === 'ai' && msg.reframingData && msg.isReframingSaved && (
-                  <div className="mt-2 sm:mt-3 pt-1.5 sm:pt-2 border-t border-green-600/30 dark:border-green-400/30">
-                      <p className="text-xs text-green-600 dark:text-green-400 flex items-center font-medium">
-                        <CheckCircle className="mr-1 sm:mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Mind Shift Saved!
+                  ) : (
+                     <p className="text-xs text-green-600 dark:text-green-400 flex items-center font-medium">
+                        <CheckCircle className="mr-1 sm:mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Goal added!
                       </p>
-                  </div>
+                  )}
+                </motion.div>
+              )}
+              {msg.sender === 'ai' && msg.reframingData && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    transition={{ duration: 0.3, delay: 0.2, ease: "easeOut" }}
+                    className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-purple-500/30 bg-purple-500/10 dark:bg-purple-600/20 p-2.5 sm:p-3 rounded-md"
+                  >
+                    <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mb-1.5">Mira's Mind Shift Suggestion:</p>
+                    {!msg.isReframingSaved ? (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs h-auto py-1 px-2 sm:py-1.5 sm:px-3 border-purple-500/50 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 hover:text-purple-700 dark:hover:text-purple-300"
+                            onClick={() => handleSaveMindShift(msg.id, msg.reframingData!)}
+                        >
+                        <Save className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" /> Save this Mind Shift
+                        </Button>
+                    ) : (
+                        <p className="text-xs text-green-600 dark:text-green-400 flex items-center font-medium">
+                            <CheckCircle className="mr-1 sm:mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Mind Shift Saved!
+                        </p>
+                    )}
+                  </motion.div>
               )}
               <p className={cn(
                   "text-[10px] sm:text-[11px] mt-1.5 sm:mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in-out", 
@@ -563,11 +572,11 @@ export default function JournalSessionPage() {
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex items-end gap-2 mr-auto mb-4"
+            className="flex items-end gap-2 mr-auto mb-4" // Added mb-4 here
           >
             <Avatar className="h-8 w-8 sm:h-10 sm:w-10 self-start shadow-sm">
                 <AvatarImage src="/logo-ai.png" alt="Mira AI" />
-              <AvatarFallback className="bg-primary/20 text-primary"><Brain className="h-4 w-4 sm:h-5 sm:w-5 animate-pulse" /></AvatarFallback>
+              <AvatarFallback className="bg-muted text-primary"><Brain className="h-4 w-4 sm:h-5 sm:w-5 animate-pulse" /></AvatarFallback>
             </Avatar>
             <div className="px-3 py-2 sm:px-4 sm:py-3 rounded-2xl shadow-md bg-muted text-foreground rounded-bl-lg">
               <p className="text-sm italic text-muted-foreground">Mira is typing...</p>
@@ -608,4 +617,3 @@ export default function JournalSessionPage() {
   );
 }
 
-    
