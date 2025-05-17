@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Brain, Activity, TrendingUp, Lightbulb, Loader2, AlertTriangle } from 'lucide-react';
+import { Brain, Activity, TrendingUp, Lightbulb, Loader2, AlertTriangle, Sparkles } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
@@ -311,12 +311,11 @@ export default function InsightsPage() {
           </div>
           <div className="md:w-1/3 flex-shrink-0">
              <Image 
-              src="https://placehold.co/400x350.png"
-              alt="Abstract data visualization"
+              src="/images/insights/data-chart-visual.png"
+              alt="Abstract data visualization representing personal insights"
               width={400}
               height={350}
               className="object-cover w-full h-full"
-              data-ai-hint="data chart"
             />
           </div>
         </CardContent>
@@ -325,3 +324,4 @@ export default function InsightsPage() {
     </div>
   );
 }
+

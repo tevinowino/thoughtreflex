@@ -1,9 +1,9 @@
 
 'use client';
 
-import { Button, buttonVariants } from '@/components/ui/button'; // Added buttonVariants
+import { Button, buttonVariants } from '@/components/ui/button'; 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input'; // For search
+import { Input } from '@/components/ui/input'; 
 import { PlusCircle, NotebookPen as NotebookIcon, Loader2, Edit3, ShieldCheck, Search, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils';
 interface NotebookEntry {
   id: string;
   title: string;
-  content: string; // Added content for searching
+  content: string; 
   createdAt: Timestamp | Date;
   lastUpdatedAt: Timestamp | Date;
   contentPreview?: string;
@@ -58,7 +58,7 @@ export default function NotebookPage() {
         return {
           id: doc.id,
           title: data.title || 'Untitled Entry',
-          content: data.content || '', // Store full content for search
+          content: data.content || '', 
           createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
           lastUpdatedAt: data.lastUpdatedAt?.toDate ? data.lastUpdatedAt.toDate() : new Date(),
           contentPreview: data.content ? data.content.substring(0, 100) + (data.content.length > 100 ? '...' : '') : 'No preview available.',
@@ -224,12 +224,11 @@ export default function NotebookPage() {
           </div>
           <div className="md:w-1/3 flex-shrink-0">
              <Image 
-              src="https://placehold.co/400x300.png"
-              alt="Person writing in a physical notebook"
+              src="/images/notebook/notebook-writing-visual.png"
+              alt="Person writing in a physical notebook, symbolizing private reflection"
               width={400}
               height={300}
               className="object-cover w-full h-full"
-              data-ai-hint="writing notebook pen"
             />
           </div>
         </CardContent>

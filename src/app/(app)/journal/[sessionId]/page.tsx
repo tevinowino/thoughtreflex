@@ -1,3 +1,4 @@
+
 // src/app/(app)/journal/[sessionId]/page.tsx
 'use client';
 
@@ -417,7 +418,7 @@ export default function JournalSessionPage() {
               <DialogFooter className="justify-between sm:justify-between gap-2">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                     <Button variant="destructive" outline disabled={isDeletingSession} className="w-full sm:w-auto">
+                     <Button variant="destructive" disabled={isDeletingSession} className={cn(buttonVariants({ variant: "destructive" }), "w-full sm:w-auto")}>
                       {isDeletingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                       Delete Session
                     </Button>
@@ -461,7 +462,7 @@ export default function JournalSessionPage() {
             )}
           >
             <Avatar className="h-10 w-10 self-start shadow-sm border-2 border-background"> 
-              <AvatarImage src={msg.avatar || undefined} data-ai-hint={msg.sender === 'user' ? 'profile user' : 'ai bot'} />
+              <AvatarImage src={msg.avatar || undefined} />
               <AvatarFallback className={cn(msg.sender === 'user' ? 'bg-secondary text-secondary-foreground' : 'bg-primary/20 text-primary')}>
                 {msg.sender === 'user' ? <User className="h-5 w-5" /> : <Brain className="h-5 w-5" />}
               </AvatarFallback>
@@ -512,7 +513,7 @@ export default function JournalSessionPage() {
             className="flex items-end gap-2.5 mr-auto mb-3"
           >
             <Avatar className="h-10 w-10 self-start shadow-sm">
-                <AvatarImage src="/logo-ai.png" alt="Mira AI" data-ai-hint="ai bot thinking"/>
+                <AvatarImage src="/logo-ai.png" alt="Mira AI" />
               <AvatarFallback className="bg-primary/20 text-primary"><Brain className="h-5 w-5 animate-pulse" /></AvatarFallback>
             </Avatar>
             <div className="px-4 py-3 rounded-2xl shadow-md bg-muted text-foreground rounded-bl-lg">
@@ -557,3 +558,4 @@ export default function JournalSessionPage() {
     </div>
   );
 }
+

@@ -127,12 +127,11 @@ export default function CareersPage() {
             </div>
             <div className="order-first md:order-last">
               <Image
-                src="https://placehold.co/600x450.png"
-                alt="Team members collaborating"
+                src="/images/careers/diverse-team-meeting-visual.png"
+                alt="Diverse team members collaborating effectively in a meeting"
                 width={600}
                 height={450}
                 className="rounded-2xl shadow-xl object-cover"
-                data-ai-hint="diverse team meeting"
               />
             </div>
           </div>
@@ -141,3 +140,4 @@ export default function CareersPage() {
     </div>
   );
 }
+

@@ -25,12 +25,11 @@ export default function AboutPage() {
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
               <Image
-                src="https://placehold.co/600x400.png"
-                alt="Team working on ThoughtReflex"
+                src="/images/about/team-collaboration-visual.png"
+                alt="Team collaborating on ideas for ThoughtReflex"
                 width={600}
                 height={400}
                 className="rounded-2xl shadow-xl object-cover"
-                data-ai-hint="team collaboration"
               />
             </div>
             <div className="space-y-6">
@@ -97,3 +96,4 @@ export default function AboutPage() {
     </div>
   );
 }
+

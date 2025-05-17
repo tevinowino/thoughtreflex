@@ -274,12 +274,11 @@ export default function RecapsPage() {
           </div>
           <div className="md:w-1/3 flex-shrink-0">
              <Image 
-              src="https://placehold.co/400x350.png"
-              alt="Person looking at a scenic view thoughtfully"
+              src="/images/recaps/scenic-reflection-visual.png"
+              alt="Person looking at a scenic view thoughtfully, representing weekly reflection"
               width={400}
               height={350}
               className="object-cover w-full h-full"
-              data-ai-hint="scenic view reflection"
             />
           </div>
         </CardContent>
@@ -287,3 +286,4 @@ export default function RecapsPage() {
     </div>
   );
 }
+

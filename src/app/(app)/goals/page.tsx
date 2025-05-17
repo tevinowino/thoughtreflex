@@ -256,12 +256,11 @@ export default function GoalsPage() {
           </div>
           <div className="md:w-1/3 flex-shrink-0">
              <Image 
-              src="https://placehold.co/400x350.png"
-              alt="Person looking at a mountain peak"
+              src="/images/goals/goal-inspiration.png"
+              alt="Person looking at a mountain peak, symbolizing goal achievement"
               width={400}
               height={350}
               className="object-cover w-full h-full"
-              data-ai-hint="mountain peak success"
             />
           </div>
         </CardContent>
@@ -269,3 +268,4 @@ export default function GoalsPage() {
     </div>
   );
 }
+

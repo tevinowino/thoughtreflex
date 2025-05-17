@@ -1,3 +1,4 @@
+
 // src/components/landing/testimonials-section.tsx
 'use client';
 
@@ -133,7 +134,7 @@ export function TestimonialsSection() {
                   <CardContent className="p-6 flex flex-col">
                     <div className="flex items-center mb-4">
                       <Avatar className="h-12 w-12 mr-4 border-2 border-primary/20">
-                        <AvatarImage src={testimonial.photoURL || undefined} alt={testimonial.displayName} data-ai-hint="user avatar testimonial" />
+                        <AvatarImage src={testimonial.photoURL || undefined} alt={testimonial.displayName} />
                         <AvatarFallback className="bg-secondary text-secondary-foreground">{getInitials(testimonial.displayName)}</AvatarFallback>
                       </Avatar>
                       <div>
@@ -170,3 +171,4 @@ export function TestimonialsSection() {
     </section>
   );
 }
+

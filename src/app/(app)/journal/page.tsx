@@ -1,7 +1,7 @@
 
 'use client';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button'; // Added buttonVariants
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PlusCircle, BookOpen, Loader2, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
@@ -143,12 +143,11 @@ export default function JournalPage() {
           </div>
           <div className="md:w-1/3 flex-shrink-0">
              <Image 
-              src="https://placehold.co/400x300.png"
-              alt="Person journaling peacefully"
+              src="/images/journal/journal-writing-visual.png"
+              alt="Person journaling peacefully, symbolizing self-reflection"
               width={400}
               height={300}
               className="object-cover w-full h-full"
-              data-ai-hint="journal writing"
             />
           </div>
         </CardContent>
@@ -156,3 +155,4 @@ export default function JournalPage() {
     </div>
   );
 }
+

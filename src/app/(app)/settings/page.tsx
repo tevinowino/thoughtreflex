@@ -1,7 +1,7 @@
 
 'use client';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,11 +41,11 @@ import { EmailAuthProvider } from 'firebase/auth';
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
 
 const avatarOptions = [
-  { id: 'avatar1', name: 'Character 1', url: 'https://placehold.co/100x100.png', hint: 'character playful' },
-  { id: 'avatar2', name: 'Character 2', url: 'https://placehold.co/100x100.png', hint: 'character serious' },
-  { id: 'avatar3', name: 'Character 3', url: 'https://placehold.co/100x100.png', hint: 'character calm' },
-  { id: 'avatar4', name: 'Character 4', url: 'https://placehold.co/100x100.png', hint: 'character joyful' },
-  { id: 'no_avatar', name: 'No Avatar', url: '', hint: 'abstract user'}
+  { id: 'avatar1', name: 'Character 1', url: '/avatars/avatar1.png' },
+  { id: 'avatar2', name: 'Character 2', url: '/avatars/avatar2.png' },
+  { id: 'avatar3', name: 'Character 3', url: '/avatars/avatar3.png' },
+  { id: 'avatar4', name: 'Character 4', url: '/avatars/avatar4.png' },
+  { id: 'no_avatar', name: 'No Avatar', url: ''}
 ];
 
 
@@ -98,7 +98,7 @@ export default function SettingsPage() {
       }
       // Handle empty string for photoURL correctly (store as null)
       const newPhotoURL = selectedAvatarUrl === '' ? null : selectedAvatarUrl;
-      if (newPhotoURL !== (user.photoURL || null)) {
+      if (newPhotoURL !== (user.photoURL || null)) { // Compare against user.photoURL or null
           profileUpdates.photoURL = newPhotoURL;
       }
 
@@ -239,7 +239,6 @@ export default function SettingsPage() {
                         width={64} 
                         height={64} 
                         className="rounded-full object-cover w-16 h-16"
-                        data-ai-hint={avatar.hint}
                     />
                 ) : (
                     <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
@@ -303,7 +302,7 @@ export default function SettingsPage() {
       </Card>
        <div className="flex justify-end">
          <Button onClick={handleSaveChanges} disabled={isSaving || authLoading}>
-            {isSaving ? <Loader2 className="animate-spin"/> : null}
+            {isSaving ? <Loader2 className="animate-spin mr-2"/> : null}
             {isSaving ? 'Saving...' : 'Save All Changes'}
           </Button>
        </div>
@@ -320,10 +319,6 @@ export default function SettingsPage() {
             </Button>
             <Button variant="outline" asChild>
                 <Link href="/settings/export-data">Export My Data</Link>
-            </Button>
-             <Button variant="destructive" onClick={signOut} className="w-full md:w-auto">
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign Out
             </Button>
             <AlertDialog open={isDeleteConfirmationOpen} onOpenChange={setIsDeleteConfirmationOpen}>
               <AlertDialogTrigger asChild>
@@ -345,7 +340,7 @@ export default function SettingsPage() {
                   <AlertDialogAction
                     onClick={handleDeleteDataConfirmed}
                     disabled={isDeletingData}
-                    className={cn(Button({variant:"destructive"}))}
+                    className={cn(buttonVariants({variant:"destructive"}))}
                   >
                     {isDeletingData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     Yes, Delete My Data
@@ -353,6 +348,10 @@ export default function SettingsPage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            <Button variant="outline" onClick={signOut} className="w-full md:w-auto">
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign Out
+            </Button>
 
             {/* Password Prompt Dialog */}
             <Dialog open={isPasswordPromptOpen} onOpenChange={setIsPasswordPromptOpen}>
