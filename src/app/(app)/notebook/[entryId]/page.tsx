@@ -3,7 +3,7 @@
 
 import { useState, useEffect, FormEvent, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
@@ -173,7 +173,7 @@ export default function NotebookEntryPage() {
                     <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete this entry. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleDeleteEntry} className={cn(Button({variant: "destructive"}))} disabled={isDeleting}>
+                      <AlertDialogAction onClick={handleDeleteEntry} className={cn(buttonVariants({variant: "destructive"}))} disabled={isDeleting}>
                         {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                         Delete
                       </AlertDialogAction>
@@ -237,3 +237,4 @@ export default function NotebookEntryPage() {
     </form>
   );
 }
+
