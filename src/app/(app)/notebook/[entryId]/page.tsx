@@ -1,9 +1,9 @@
 
 'use client';
 
-import { useState, useEffect, FormEvent, useMemo } from 'react';
+import { useState, useEffect, FormEvent, useMemo, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Button, buttonVariants } from '@/components/ui/button'; 
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
@@ -16,7 +16,8 @@ import Link from 'next/link';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { cn } from '@/lib/utils';
 
-const formatTimestamp = (date: Date | undefined | null): string => {
+const formatTimestamp = (date: Date | undefined | null, savingState?: string): string => {
+  if (savingState) return savingState;
   if (!date) return "Not yet saved";
   return `Last saved: ${date.toLocaleDateString()} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 };
@@ -24,7 +25,7 @@ const formatTimestamp = (date: Date | undefined | null): string => {
 
 export default function NotebookEntryPage() {
   const rawParams = useParams();
-  const params = { ...rawParams }; // Shallow copy
+  const params = { ...rawParams }; 
   const router = useRouter();
   const { toast } = useToast();
   const entryIdParams = params.entryId as string;
@@ -32,12 +33,17 @@ export default function NotebookEntryPage() {
   const { user, loading: authLoading } = useAuth();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [initialTitle, setInitialTitle] = useState(''); // For autosave
+  const [initialContent, setInitialContent] = useState(''); // For autosave
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); // For manual save
+  const [isAutosaving, setIsAutosaving] = useState(false); // For autosave indicator
   const [isDeleting, setIsDeleting] = useState(false);
   const [currentEntryId, setCurrentEntryId] = useState(entryIdParams === 'new' ? null : entryIdParams);
   const [lastSavedDisplay, setLastSavedDisplay] = useState<string>("Not yet saved");
   const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
+
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -46,10 +52,12 @@ export default function NotebookEntryPage() {
       return;
     }
 
-    if (currentEntryId === null) { // Corresponds to 'new'
+    if (currentEntryId === null) { 
       setTitle('');
       setContent('');
-      setLastSavedDisplay("Not yet saved");
+      setInitialTitle('');
+      setInitialContent('');
+      setLastSavedDisplay("Start typing to autosave...");
       setIsLoading(false);
     } else {
       setIsLoading(true);
@@ -57,8 +65,12 @@ export default function NotebookEntryPage() {
       getDoc(entryDocRef).then(docSnap => {
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setTitle(data.title || '');
-          setContent(data.content || '');
+          const fetchedTitle = data.title || '';
+          const fetchedContent = data.content || '';
+          setTitle(fetchedTitle);
+          setContent(fetchedContent);
+          setInitialTitle(fetchedTitle);
+          setInitialContent(fetchedContent);
           setLastSavedDisplay(formatTimestamp(data.lastUpdatedAt?.toDate()));
         } else {
           toast({ title: "Error", description: "Notebook entry not found.", variant: "destructive" });
@@ -74,48 +86,93 @@ export default function NotebookEntryPage() {
     }
   }, [currentEntryId, user, authLoading, router, toast]);
 
-  const handleSaveEntry = async (e?: FormEvent) => {
-    e?.preventDefault();
+  const performSave = useCallback(async (isManualSave = false) => {
     if (!user) return;
     if (!title.trim() && !content.trim()) {
-        toast({ title: "Cannot Save Empty Entry", description: "Please add a title or some content.", variant: "destructive" });
-        return;
+      if (isManualSave) { // Only toast for manual save of empty entry
+         toast({ title: "Cannot Save Empty Entry", description: "Please add a title or some content.", variant: "destructive" });
+      }
+      return;
     }
 
-    setIsSaving(true);
+    if (!isManualSave) setIsAutosaving(true); else setIsSaving(true);
+    
+    setLastSavedDisplay("Saving...");
+
     const entryData = {
-      title: title.trim() || 'Untitled Entry',
+      title: title.trim() || (currentEntryId ? 'Untitled Entry' : ''), // Keep untitled if existing & title cleared
       content: content,
       userId: user.uid,
       lastUpdatedAt: serverTimestamp(),
     };
 
     try {
-      if (currentEntryId === null) { // Is a new entry
+      let entryIdToUpdate = currentEntryId;
+      if (entryIdToUpdate === null) { 
         const newEntryRef = await addDoc(collection(db, 'users', user.uid, 'notebookEntries'), {
           ...entryData,
           createdAt: serverTimestamp(),
         });
-        toast({ title: "Entry Saved", description: "Your new notebook entry has been saved." });
-        setCurrentEntryId(newEntryRef.id); // Update state with new ID
-        router.replace(`/notebook/${newEntryRef.id}`, { scroll: false }); // Update URL
-        setLastSavedDisplay(`Saved at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+        setCurrentEntryId(newEntryRef.id); 
+        entryIdToUpdate = newEntryRef.id;
+        if (entryIdParams === 'new') { // Only replace URL if we were on the 'new' page
+            router.replace(`/notebook/${newEntryRef.id}`, { scroll: false });
+        }
+        if (isManualSave) toast({ title: "Entry Saved", description: "Your new notebook entry has been saved." });
       } else {
-        const entryDocRef = doc(db, 'users', user.uid, 'notebookEntries', currentEntryId);
+        const entryDocRef = doc(db, 'users', user.uid, 'notebookEntries', entryIdToUpdate);
         await updateDoc(entryDocRef, entryData);
-        toast({ title: "Entry Updated", description: "Your notebook entry has been updated." });
-        setLastSavedDisplay(`Saved at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+        if (isManualSave) toast({ title: "Entry Updated", description: "Your notebook entry has been updated." });
       }
+      setInitialTitle(entryData.title); // Update initial state after successful save
+      setInitialContent(entryData.content);
+      setLastSavedDisplay(`Last saved: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
     } catch (error) {
       console.error("Error saving entry:", error);
-      toast({ title: "Error", description: "Could not save notebook entry.", variant: "destructive" });
+      toast({ title: "Save Failed", description: "Could not save notebook entry.", variant: "destructive" });
+      setLastSavedDisplay("Save failed");
     } finally {
-      setIsSaving(false);
+      if (!isManualSave) setIsAutosaving(false); else setIsSaving(false);
     }
-  };
+  }, [user, title, content, currentEntryId, router, toast, entryIdParams]);
+
+
+  const handleManualSave = (e?: FormEvent) => {
+    e?.preventDefault();
+    performSave(true);
+  }
+
+  useEffect(() => {
+    if (isLoading || authLoading || !user) return; // Don't autosave while loading or if not logged in
+
+    // Only trigger autosave if content has actually changed from initial or if it's a new entry with content
+    const hasChanged = title !== initialTitle || content !== initialContent;
+    const isNewAndNotEmpty = currentEntryId === null && (title.trim() !== '' || content.trim() !== '');
+
+    if (hasChanged || isNewAndNotEmpty) {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+      if (title.trim() === '' && content.trim() === '' && currentEntryId === null) {
+         // Don't autosave if it's a new entry and still completely blank
+      } else {
+        setLastSavedDisplay("Unsaved changes...");
+        debounceTimeoutRef.current = setTimeout(() => {
+          performSave(false);
+        }, 2500); // 2.5-second delay for autosave
+      }
+    }
+
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, [title, content, isLoading, initialTitle, initialContent, currentEntryId, performSave, authLoading, user]);
+
 
   const handleDeleteEntry = async () => {
-    if (!user || !currentEntryId) return; // Can't delete if it's new or no ID
+    if (!user || !currentEntryId) return; 
     setIsDeleting(true);
     try {
       const entryDocRef = doc(db, 'users', user.uid, 'notebookEntries', currentEntryId);
@@ -129,18 +186,18 @@ export default function NotebookEntryPage() {
       setIsDeleting(false);
     }
   };
-  
+
   const handleClearEntry = () => {
     setTitle('');
     setContent('');
     setIsClearConfirmationOpen(false);
-    toast({ title: "Entry Cleared", description: "Content has been cleared. Save to make it permanent."});
+    toast({ title: "Entry Cleared", description: "Content has been cleared. Changes will be autosaved."});
   };
 
   const wordCount = useMemo(() => content.trim() === '' ? 0 : content.trim().split(/\s+/).length, [content]);
   const charCount = useMemo(() => content.length, [content]);
 
-  if (authLoading || isLoading) {
+  if (authLoading || (isLoading && entryIdParams !== 'new')) {
     return (
       <div className="flex justify-center items-center h-[calc(100vh-theme(spacing.32))] md:h-[calc(100vh-theme(spacing.24))]">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -149,7 +206,7 @@ export default function NotebookEntryPage() {
   }
 
   return (
-    <form onSubmit={handleSaveEntry} className="space-y-6">
+    <form onSubmit={handleManualSave} className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" asChild className="hover:bg-primary/10 rounded-full">
@@ -189,20 +246,20 @@ export default function NotebookEntryPage() {
                     </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
-                    <AlertDialogHeader><AlertDialogTitle>Clear Entry?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to clear the title and content of this entry? This action is not saved until you click "Save Entry".</AlertDialogDescription></AlertDialogHeader>
+                    <AlertDialogHeader><AlertDialogTitle>Clear Entry?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to clear the title and content of this entry? Changes will be autosaved.</AlertDialogDescription></AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction onClick={handleClearEntry}>Yes, Clear</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-            <Button type="submit" disabled={isSaving || (!title.trim() && !content.trim())} className="shadow-md">
-                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                {isSaving ? 'Saving...' : 'Save Entry'}
+            <Button type="submit" disabled={isSaving || isAutosaving} className="shadow-md">
+                {(isSaving || isAutosaving) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                {(isSaving || isAutosaving) ? 'Saving...' : 'Save Entry'}
             </Button>
         </div>
       </div>
-      
+
       <Card className="shadow-xl rounded-2xl overflow-hidden">
         <CardContent className="p-4 sm:p-6 space-y-4">
           <div>
@@ -228,7 +285,10 @@ export default function NotebookEntryPage() {
           </div>
         </CardContent>
         <CardFooter className="p-3 sm:p-4 bg-muted/30 border-t flex justify-between items-center text-xs text-muted-foreground">
-            <span>{lastSavedDisplay}</span>
+            <span>
+              {isAutosaving && <Loader2 className="inline-block mr-1 h-3 w-3 animate-spin" />}
+              {lastSavedDisplay}
+            </span>
             <div className="space-x-3">
                 <span>Words: {wordCount}</span>
                 <span>Characters: {charCount}</span>
@@ -238,5 +298,3 @@ export default function NotebookEntryPage() {
     </form>
   );
 }
-
-    
