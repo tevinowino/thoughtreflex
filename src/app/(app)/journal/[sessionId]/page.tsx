@@ -371,14 +371,14 @@ export default function JournalSessionPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-theme(spacing.28)-2rem)] md:h-[calc(100vh-theme(spacing.20)-2rem)] bg-card rounded-2xl shadow-2xl overflow-hidden">
       <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-4 border-b bg-muted/30">
-        <div className="flex items-center gap-1 sm:gap-2 min-w-0"> {/* Added min-w-0 here */}
+        <div className="flex items-center gap-1 sm:gap-2 min-w-0">
           <Button variant="ghost" size="icon" asChild className="hover:bg-primary/10 shrink-0">
             <Link href="/journal">
               <ArrowLeft className="h-5 w-5 text-primary" />
               <span className="sr-only">Back to Journals</span>
             </Link>
           </Button>
-          <div className="min-w-0"> {/* Wrapper for CardTitle to allow truncation */}
+          <div className="min-w-0">
              <CardTitle className="text-base sm:text-lg md:text-xl font-semibold truncate text-foreground">{sessionTitle}</CardTitle>
           </div>
         </div>
@@ -452,7 +452,7 @@ export default function JournalSessionPage() {
       </CardHeader>
 
       <ScrollArea className="flex-1 p-4" viewportRef={viewportRef} ref={scrollAreaRef}>
-        <div className="space-y-0"> {/* Removed space-y-6 from here */}
+        <div className="space-y-0">
         {messages.map((msg) => (
           <motion.div
             key={msg.id}
@@ -460,7 +460,7 @@ export default function JournalSessionPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, ease: "easeOut" }}
             className={cn(
-              "group flex items-end gap-2 max-w-[85%] sm:max-w-[75%] mb-4", // Added mb-4 here
+              "group flex items-end gap-2 max-w-[85%] sm:max-w-[75%] mb-4", 
               msg.sender === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
             )}
           >
@@ -513,7 +513,7 @@ export default function JournalSessionPage() {
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex items-end gap-2 mr-auto mb-4" // Added mb-4
+            className="flex items-end gap-2 mr-auto mb-4"
           >
             <Avatar className="h-8 w-8 sm:h-10 sm:w-10 self-start shadow-sm">
                 <AvatarImage src="/logo-ai.png" alt="Mira AI" />
@@ -557,5 +557,3 @@ export default function JournalSessionPage() {
     </div>
   );
 }
-
-    

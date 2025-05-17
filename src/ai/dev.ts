@@ -8,3 +8,4 @@ import '@/ai/flows/therapist-modes.ts';
 import '@/ai/flows/analyze-weekly-sentiments-flow.ts';
 import '@/ai/flows/identify-journal-themes-flow.ts';
 import '@/ai/flows/generate-personalized-suggestions-flow.ts';
+import '@/ai/flows/reframe-thought-flow.ts';
