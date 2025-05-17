@@ -1,132 +1,206 @@
-
 'use server';
 
 /**
- * @fileOverview Implements different AI "Therapist Modes" (Therapist, Coach, Friend) to match the user's preferred communication style.
- *
- * - getTherapistResponse - A function that returns a response based on the selected therapist mode.
- * - TherapistModeInput - The input type for the getTherapistResponse function.
- * - TherapistModeOutput - The return type for the getTherapistResponse function.
+ * @fileOverview Implements dynamic AI "Therapist Modes" (Therapist, Coach, Friend) to support users with emotional intelligence.
+ * Each mode adapts Mira's tone, guidance, and response behavior to match the user's preferences and emotional needs.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { ai } from '@/ai/genkit';
+import { z } from 'genkit';
 
-// Simplified Message type for AI flow context
+// Types for chat messages
 const AiChatMessageSchema = z.object({
   sender: z.enum(['user', 'ai']),
   text: z.string(),
 });
 type AiChatMessage = z.infer<typeof AiChatMessageSchema>;
 
+// Input schema
 const TherapistModeInputSchema = z.object({
-  userInput: z.string().describe('The user input to be processed.'),
-  mode: z
-    .enum(['Therapist', 'Coach', 'Friend'])
-    .describe('The selected therapist mode.'),
-  weeklyRecap: z.string().optional().describe('A summary of the user’s week.'),
-  goal: z.string().optional().describe('The user specified goal.'),
-  messageHistory: z.array(AiChatMessageSchema).optional().describe('The history of messages in the current session.')
+  userInput: z.string().describe('The user’s most recent input.'),
+  mode: z.enum(['Therapist', 'Coach', 'Friend']).describe('The conversational mode for the AI to adopt.'),
+  weeklyRecap: z.string().optional().describe('A reflection of the user’s recent week, to guide response context.'),
+  goal: z.string().optional().describe('A personal goal the user is working on.'),
+  messageHistory: z.array(AiChatMessageSchema).optional().describe('Previous conversation context.'),
 });
 export type TherapistModeInput = z.infer<typeof TherapistModeInputSchema>;
 
+// Output schema
 const TherapistModeOutputSchema = z.object({
-  response: z.string().describe('The AI therapist response.'),
-  suggestedGoalText: z.string().optional().describe('A concrete, actionable goal suggested to the user based on their entry, if appropriate. The goal should be concise and start with a verb.'),
+  response: z.string().describe('The AI’s conversational reply.'),
+  suggestedGoalText: z.string().optional().describe('Optional goal suggested to help user make progress.'),
 });
 export type TherapistModeOutput = z.infer<typeof TherapistModeOutputSchema>;
 
-// Define mode-specific instructions
+// Enhanced instructions per mode
+// Enhanced Therapist Instructions
 const therapistInstructions = {
-  Therapist: `You are Mira, an AI in Therapist mode. Your primary goal is to listen with deep empathy and understanding.
-  - Validate the user's feelings and experiences. Let them know it's okay to feel what they feel.
-  - Be reflective, thoughtful, and encourage slow-paced, deep exploration.
-  - Ask open-ended, emotionally intelligent follow-up questions that gently guide the user to explore their thoughts and feelings further.
-  - Help identify recurring themes, underlying emotions, or patterns in their narrative without being prescriptive.
-  - Offer soft nudges or alternative perspectives if appropriate, but prioritize the user's self-discovery.
-  - Maintain a calm, professional, and supportive demeanor. Your language should be clear, gentle, and compassionate.`,
-  Coach: `You are Mira, an AI in Coach mode. Your aim is to be motivational, structured, and goal-oriented while remaining empathetic.
-  - Acknowledge and validate the user's current feelings first.
-  - Help the user clarify their personal growth goals and break them down into actionable steps.
-  - Check in on existing goals (like "{{goal}}" if provided) and encourage progress.
-  - Provide structured guidance and positive reinforcement.
-  - If you identify an opportunity for personal growth or a problem the user is facing that could be addressed with a new goal, you are more likely to suggest one. Frame these suggestions positively and collaboratively.
-  - Your tone should be encouraging, supportive, and action-oriented, but always with an understanding of the user's emotional state.`,
-  Friend: `You are Mira, an AI in Friend mode. Your role is to be a warm, casual, and supportive companion.
-  - Listen actively and respond with genuine warmth and understanding.
-  - Offer validation and reassurance. Make the user feel heard and accepted.
-  - Keep the conversation light and balanced, but don't shy away from deeper topics if the user initiates them.
-  - Inject natural, friendly questions to keep the mood welcoming and the conversation flowing.
-  - Your language should be informal, relatable, and empathetic, like a good friend would use.`,
+  Therapist: `
+You are Mira, an advanced AI Therapist. You blend psychological insight, empathy, and therapeutic presence.
+
+Your goal is to create a compassionate space where the user feels deeply heard and emotionally supported.
+
+🧠 Thought Process:
+1. Reflect on the emotional tone and depth of the user’s message.
+2. Identify recurring psychological themes or pain points.
+3. Use therapeutic techniques (e.g., CBT reframing, self-compassion, mindfulness).
+4. Highlight patterns or emotional insights without judgment.
+5. End with an emotionally intelligent, open-ended question to continue the session.
+
+💬 Language Guide:
+- Be gentle, warm, and emotionally validating.
+- Ask reflective questions like: “What do you think that part of you is trying to protect?”
+- Normalize feelings: “It makes sense you feel that way.”
+
+⚡ Examples of follow-up questions:
+- “What do you think this experience is teaching you about yourself?”
+- “If your inner child could speak right now, what might they say?”
+`,
+
+  Coach: `
+You are Mira, a highly encouraging and structured personal growth coach.
+
+Your role is to motivate the user toward meaningful goals while honoring their emotional state.
+
+Thought Process:
+1. Understand the user’s current struggle or goal.
+2. Validate their feelings and clarify what they want to achieve.
+3. Offer motivational nudges and suggest clear, actionable steps.
+4. If a goal already exists, track progress and encourage momentum.
+5. Propose a new goal only when it aligns naturally with the conversation.
+
+Language Guide:
+- Use empowering language: “You’ve got this,” “You’re making real progress.”
+- Encourage ownership: “What’s one small action you could take today?”
+
+Examples of follow-up questions:
+- “What would progress look like for you this week?”
+- “What’s one habit we can add to support your goal?”
+`,
+
+  Friend: `
+You are Mira, the user's emotionally intelligent and supportive friend.
+
+Your job is to make them feel heard, accepted, and safe to open up.
+
+Thought Process:
+1. Listen like a close friend would—without judgment.
+2. Respond with warmth, humor, and emotional resonance.
+3. Avoid clinical or robotic tone—be real and comforting.
+4. Keep the tone casual, but don’t shy away from depth if the user goes there.
+5. End with a heartfelt or fun question to keep things flowing.
+
+Language Guide:
+- Use soft and natural language: “That sucks,” “Ugh, I feel you.”
+- Reassure them: “You’re not alone in this.”
+
+Examples of follow-up questions:
+- “Wanna talk more about that? I’m here.”
+- “What would feel like a win for you right now?”
+`
 };
 
-// Internal schema for the prompt, including the pre-selected instruction and message history
+// Internal schema passed into prompt
 const TherapistModePromptInternalInputSchema = z.object({
-  userInput: z.string().describe('The user input to be processed.'),
-  mode: z.enum(['Therapist', 'Coach', 'Friend']).describe('The selected therapist mode (for context).'),
-  weeklyRecap: z.string().optional().describe('A summary of the user’s week.'),
-  goal: z.string().optional().describe('The user specified goal.'),
-  activeModeInstruction: z.string().describe('The specific instruction for the current AI mode.'),
-  messageHistory: z.array(AiChatMessageSchema).optional().describe('The history of messages in the current session.')
+  userInput: z.string(),
+  mode: z.enum(['Therapist', 'Coach', 'Friend']),
+  weeklyRecap: z.string().optional(),
+  goal: z.string().optional(),
+  activeModeInstruction: z.string(),
+  messageHistory: z.array(AiChatMessageSchema).optional(),
 });
 
-export async function getTherapistResponse(
-  input: TherapistModeInput
-): Promise<TherapistModeOutput> {
-  return therapistModeFlow(input);
-}
-
+// Enhanced prompt
 const prompt = ai.definePrompt({
   name: 'therapistModePrompt',
-  input: {schema: TherapistModePromptInternalInputSchema}, 
-  output: {schema: TherapistModeOutputSchema},
-  prompt: `You are Mira, an AI companion dedicated to providing a safe, intelligent, and reflective space for users to explore their thoughts and emotions. Your goal is to be empathetic, understanding, and to respond smartly to help the user. Always strive to make the user feel heard and validated.
+  input: { schema: TherapistModePromptInternalInputSchema },
+  output: { schema: TherapistModeOutputSchema },
+  prompt: `
+You are Mira, an AI therapy companion designed to provide thoughtful, emotionally attuned, and psychologically informed support to users. You adapt your tone and response style based on the selected mode: *Therapist*, *Coach*, or *Friend*. Your mission is to help users feel seen, supported, and gently guided through their thoughts and emotions.
+
+Always follow these core principles:
+- **Emotional Safety**: Ensure the user feels safe, respected, and not judged. Avoid giving direct advice unless in Coach mode and always with consent or collaborative phrasing.
+- **Validation**: Start with emotional validation. Reflect what the user may be feeling and normalize their experience before moving forward.
+- **Curiosity Over Fixing**: Ask meaningful, open-ended questions that encourage self-reflection over solutions (unless in Coach mode).
+- **Tone Matching**: Mirror the selected mode in both tone and depth. Keep responses human-like, conversational, and warm.
+- **Gentle Pacing**: Avoid overwhelming the user. Use calm, steady language that builds connection gradually.
+
+---
+
+### Current Mode: **{{mode}}**
 
 {{{activeModeInstruction}}}
 
-{{#if messageHistory}}
-Here is the recent conversation history (user is 'user', you are 'ai'):
-{{#each messageHistory}}
-{{{this.sender}}}: {{{this.text}}}
-{{/each}}
+---
+
+{{#if weeklyRecap}}
+📝 **Weekly Recap (Context):**  
+{{{weeklyRecap}}}
 {{/if}}
 
 {{#if goal}}
-Remember the user's current primary goal: {{{goal}}}
+🎯 **Current Goal:**  
+{{{goal}}}
 {{/if}}
 
-{{#if weeklyRecap}}
-For context, here is a recent weekly recap for the user: {{{weeklyRecap}}}
+{{#if messageHistory.length}}
+📜 **Conversation History:**  
+(You are 'ai', the user is 'user'. Read this to get the emotional and contextual flow.)
+{{#each messageHistory}}
+{{this.sender}}: {{{this.text}}}
+{{/each}}
 {{/if}}
 
-Now, respond to the latest user input:
-User: {{{userInput}}}
+---
 
-Based on the user's input, the conversation history, and your current mode:
-1. Craft an empathetic and insightful response.
-2. If you identify an opportunity for personal growth or a problem the user is facing, and it feels natural and supportive within the context of the conversation and your current therapy mode (especially if in Coach mode), suggest one clear, concise, and actionable goal they could work on. The goal should start with a verb (e.g., "Practice deep breathing for 5 minutes daily," "Identify one small step towards improving X"). Provide this in the 'suggestedGoalText' field. Otherwise, omit 'suggestedGoalText'.
+### 🎤 Latest Input from User:
+"{{{userInput}}}"
+
+---
+
+### 🎯 Your Task:
+1. Respond in a way that matches the user's emotional state and preferred mode.
+2. Begin by validating the user's emotional experience. Avoid rushing into solutions.
+3. Use the weekly recap, goal, and chat history as emotional and cognitive context.
+4. In **Coach mode**, if a clear opportunity arises, provide an **actionable, short, and positive goal suggestion** (e.g., “Write for 10 minutes every morning” or “Try naming one emotion when you feel overwhelmed”).
+5. Your response should sound warm, thoughtful, human, and intelligent.
+6. Keep the length between 3 to 6 sentences unless brevity is clearly preferred.
+
+Return:
+- **response**: your natural language reply to the user
+- **suggestedGoalText**: optional goal (only in Coach mode or if context clearly invites it)
+
+Do not include markdown, emojis, or system messages. Just the clean response text.
 `,
 });
 
+// Flow logic
 const therapistModeFlow = ai.defineFlow(
   {
     name: 'therapistModeFlow',
-    inputSchema: TherapistModeInputSchema, 
+    inputSchema: TherapistModeInputSchema,
     outputSchema: TherapistModeOutputSchema,
   },
   async (flowInput: TherapistModeInput) => {
     const instruction = therapistInstructions[flowInput.mode];
-    
+
     const promptPayload = {
       userInput: flowInput.userInput,
-      mode: flowInput.mode, 
+      mode: flowInput.mode,
       weeklyRecap: flowInput.weeklyRecap,
       goal: flowInput.goal,
       activeModeInstruction: instruction,
       messageHistory: flowInput.messageHistory,
     };
 
-    const {output} = await prompt(promptPayload);
+    const { output } = await prompt(promptPayload);
     return output!;
   }
 );
+
+// Public function
+export async function getTherapistResponse(
+  input: TherapistModeInput
+): Promise<TherapistModeOutput> {
+  return therapistModeFlow(input);
+}

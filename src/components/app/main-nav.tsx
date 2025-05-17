@@ -16,16 +16,18 @@ import {
   Sparkles,
   Settings,
   CalendarCheck,
-  NotebookPen, // Added NotebookPen icon
+  NotebookPen, 
+  Star, // Added Star icon
 } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard /> },
   { href: '/journal', label: 'Journal (AI Chat)', icon: <BookText /> },
-  { href: '/notebook', label: 'Notebook', icon: <NotebookPen /> }, // New Notebook item
+  { href: '/notebook', label: 'Notebook', icon: <NotebookPen /> }, 
   { href: '/goals', label: 'Goals', icon: <Target /> },
   { href: '/insights', label: 'Insights', icon: <Sparkles /> },
   { href: '/recaps', label: 'Weekly Recaps', icon: <CalendarCheck /> },
+  { href: '/feedback', label: 'Share Feedback', icon: <Star /> }, // New Feedback item
   { href: '/settings', label: 'Settings', icon: <Settings /> },
 ];
 
