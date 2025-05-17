@@ -1,24 +1,32 @@
 
 'use client';
 
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, FormEvent, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Save, Trash2, Loader2 } from 'lucide-react';
+import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { ArrowLeft, Save, Trash2, Loader2, Eraser, FileX } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, addDoc, updateDoc, deleteDoc, collection, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { cn } from '@/lib/utils';
+
+const formatTimestamp = (date: Date | undefined | null): string => {
+  if (!date) return "Not yet saved";
+  return `Last saved: ${date.toLocaleDateString()} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+};
+
 
 export default function NotebookEntryPage() {
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
-  const entryId = params.entryId as string;
+  const entryIdParams = params.entryId as string;
 
   const { user, loading: authLoading } = useAuth();
   const [title, setTitle] = useState('');
@@ -26,7 +34,9 @@ export default function NotebookEntryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isNewEntry, setIsNewEntry] = useState(entryId === 'new');
+  const [currentEntryId, setCurrentEntryId] = useState(entryIdParams === 'new' ? null : entryIdParams);
+  const [lastSavedDisplay, setLastSavedDisplay] = useState<string>("Not yet saved");
+  const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -35,20 +45,20 @@ export default function NotebookEntryPage() {
       return;
     }
 
-    if (entryId === 'new') {
-      setIsNewEntry(true);
+    if (currentEntryId === null) { // Corresponds to 'new'
       setTitle('');
       setContent('');
+      setLastSavedDisplay("Not yet saved");
       setIsLoading(false);
     } else {
-      setIsNewEntry(false);
       setIsLoading(true);
-      const entryDocRef = doc(db, 'users', user.uid, 'notebookEntries', entryId);
+      const entryDocRef = doc(db, 'users', user.uid, 'notebookEntries', currentEntryId);
       getDoc(entryDocRef).then(docSnap => {
         if (docSnap.exists()) {
           const data = docSnap.data();
           setTitle(data.title || '');
           setContent(data.content || '');
+          setLastSavedDisplay(formatTimestamp(data.lastUpdatedAt?.toDate()));
         } else {
           toast({ title: "Error", description: "Notebook entry not found.", variant: "destructive" });
           router.push('/notebook');
@@ -61,10 +71,10 @@ export default function NotebookEntryPage() {
         router.push('/notebook');
       });
     }
-  }, [entryId, user, authLoading, router, toast]);
+  }, [currentEntryId, user, authLoading, router, toast]);
 
-  const handleSaveEntry = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleSaveEntry = async (e?: FormEvent) => {
+    e?.preventDefault();
     if (!user) return;
     if (!title.trim() && !content.trim()) {
         toast({ title: "Cannot Save Empty Entry", description: "Please add a title or some content.", variant: "destructive" });
@@ -80,18 +90,20 @@ export default function NotebookEntryPage() {
     };
 
     try {
-      if (isNewEntry) {
+      if (currentEntryId === null) { // Is a new entry
         const newEntryRef = await addDoc(collection(db, 'users', user.uid, 'notebookEntries'), {
           ...entryData,
           createdAt: serverTimestamp(),
         });
         toast({ title: "Entry Saved", description: "Your new notebook entry has been saved." });
-        router.replace(`/notebook/${newEntryRef.id}`); // Update URL to new entry ID
-        setIsNewEntry(false); // No longer a new entry
+        setCurrentEntryId(newEntryRef.id); // Update state with new ID
+        router.replace(`/notebook/${newEntryRef.id}`, { scroll: false }); // Update URL
+        setLastSavedDisplay(`Saved at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
       } else {
-        const entryDocRef = doc(db, 'users', user.uid, 'notebookEntries', entryId);
+        const entryDocRef = doc(db, 'users', user.uid, 'notebookEntries', currentEntryId);
         await updateDoc(entryDocRef, entryData);
         toast({ title: "Entry Updated", description: "Your notebook entry has been updated." });
+        setLastSavedDisplay(`Saved at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
       }
     } catch (error) {
       console.error("Error saving entry:", error);
@@ -102,10 +114,10 @@ export default function NotebookEntryPage() {
   };
 
   const handleDeleteEntry = async () => {
-    if (!user || isNewEntry) return;
+    if (!user || !currentEntryId) return; // Can't delete if it's new or no ID
     setIsDeleting(true);
     try {
-      const entryDocRef = doc(db, 'users', user.uid, 'notebookEntries', entryId);
+      const entryDocRef = doc(db, 'users', user.uid, 'notebookEntries', currentEntryId);
       await deleteDoc(entryDocRef);
       toast({ title: "Entry Deleted", description: "Your notebook entry has been removed." });
       router.push('/notebook');
@@ -116,6 +128,16 @@ export default function NotebookEntryPage() {
       setIsDeleting(false);
     }
   };
+  
+  const handleClearEntry = () => {
+    setTitle('');
+    setContent('');
+    setIsClearConfirmationOpen(false);
+    toast({ title: "Entry Cleared", description: "Content has been cleared. Save to make it permanent."});
+  };
+
+  const wordCount = useMemo(() => content.trim() === '' ? 0 : content.trim().split(/\s+/).length, [content]);
+  const charCount = useMemo(() => content.length, [content]);
 
   if (authLoading || isLoading) {
     return (
@@ -127,56 +149,90 @@ export default function NotebookEntryPage() {
 
   return (
     <form onSubmit={handleSaveEntry} className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" asChild>
+            <Button variant="ghost" size="icon" asChild className="hover:bg-primary/10 rounded-full">
                 <Link href="/notebook">
-                    <ArrowLeft className="h-5 w-5" />
+                    <ArrowLeft className="h-5 w-5 text-primary" />
                     <span className="sr-only">Back to Notebook</span>
                 </Link>
             </Button>
-            <h1 className="text-2xl font-bold text-foreground">
-            {isNewEntry ? 'New Notebook Entry' : 'Edit Notebook Entry'}
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+            {currentEntryId === null ? 'New Notebook Entry' : 'Edit Notebook Entry'}
             </h1>
         </div>
-        <div className="flex gap-2">
-            {!isNewEntry && (
-                <Button type="button" variant="destructive" outline onClick={handleDeleteEntry} disabled={isDeleting}>
-                {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                Delete
-                </Button>
+        <div className="flex gap-2 self-end sm:self-center">
+            {currentEntryId !== null && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button type="button" variant="outline" className="text-destructive hover:text-destructive-foreground hover:bg-destructive/90 border-destructive/50 hover:border-destructive shadow-sm">
+                      <Trash2 className="mr-0 sm:mr-2 h-4 w-4" /> <span className="hidden sm:inline">Delete</span>
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete this entry. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDeleteEntry} className={cn(Button({variant: "destructive"}))} disabled={isDeleting}>
+                        {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
             )}
-            <Button type="submit" disabled={isSaving}>
+             <AlertDialog open={isClearConfirmationOpen} onOpenChange={setIsClearConfirmationOpen}>
+                <AlertDialogTrigger asChild>
+                     <Button type="button" variant="outline" className="shadow-sm">
+                        <Eraser className="mr-0 sm:mr-2 h-4 w-4" /> <span className="hidden sm:inline">Clear</span>
+                    </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                    <AlertDialogHeader><AlertDialogTitle>Clear Entry?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to clear the title and content of this entry? This action is not saved until you click "Save Entry".</AlertDialogDescription></AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleClearEntry}>Yes, Clear</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            <Button type="submit" disabled={isSaving || (!title.trim() && !content.trim())} className="shadow-md">
                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                 {isSaving ? 'Saving...' : 'Save Entry'}
             </Button>
         </div>
       </div>
       
-      <Card className="shadow-xl rounded-2xl">
-        <CardContent className="p-6 space-y-4">
+      <Card className="shadow-xl rounded-2xl overflow-hidden">
+        <CardContent className="p-4 sm:p-6 space-y-4">
           <div>
-            <label htmlFor="entryTitle" className="block text-sm font-medium text-foreground mb-1">Title</label>
+            <label htmlFor="entryTitle" className="block text-sm font-medium text-foreground mb-1.5">Title</label>
             <Input
               id="entryTitle"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Your entry title..."
-              className="text-lg"
+              className="text-lg bg-muted/30"
             />
           </div>
           <div>
-            <label htmlFor="entryContent" className="block text-sm font-medium text-foreground mb-1">Content</label>
+            <label htmlFor="entryContent" className="block text-sm font-medium text-foreground mb-1.5">Content</label>
             <Textarea
               id="entryContent"
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="Start writing your thoughts here..."
-              className="min-h-[calc(100vh-25rem)] md:min-h-[calc(100vh-22rem)] text-base"
+              className="min-h-[calc(100vh-28rem)] md:min-h-[calc(100vh-25rem)] text-lg leading-relaxed font-caveat bg-muted/30"
               rows={15}
             />
           </div>
         </CardContent>
+        <CardFooter className="p-3 sm:p-4 bg-muted/30 border-t flex justify-between items-center text-xs text-muted-foreground">
+            <span>{lastSavedDisplay}</span>
+            <div className="space-x-3">
+                <span>Words: {wordCount}</span>
+                <span>Characters: {charCount}</span>
+            </div>
+        </CardFooter>
       </Card>
     </form>
   );
