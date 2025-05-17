@@ -2,7 +2,7 @@
 // src/app/(app)/journal/[sessionId]/page.tsx
 'use client';
 
-import { useState, useEffect, useRef, FormEvent } from 'react';
+import React, { useState, useEffect, useRef, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,6 +22,7 @@ import { doc, getDoc, updateDoc, addDoc, collection, query, orderBy, onSnapshot,
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import { Label } from '@/components/ui/label';
 
 
 interface Message {

@@ -311,7 +311,7 @@ export default function InsightsPage() {
           </div>
           <div className="md:w-1/3 flex-shrink-0">
              <Image 
-              src="/images/insights/data-chart-visual.png"
+              src="/insights.png"
               alt="Abstract data visualization representing personal insights"
               width={400}
               height={350}
