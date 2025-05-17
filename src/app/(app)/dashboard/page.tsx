@@ -261,11 +261,11 @@ export default function DashboardPage() {
           </div>
            <div className="flex-shrink-0 w-full md:w-1/3 lg:w-1/4">
             <Image 
-              src="https://placehold.co/600x400.png" 
+              src="/insights.png" 
               alt="Abstract representation of personal insights" 
               width={600} 
-              height={400} 
-              className="rounded-xl object-cover shadow-md"
+              height={600} 
+              className="rounded-xl object-cover"
               data-ai-hint="abstract mind map"
             />
           </div>
