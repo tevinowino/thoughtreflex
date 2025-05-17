@@ -30,12 +30,13 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogHeader as ReauthDialogHeader, // Alias to avoid conflict
+  DialogHeader as ReauthDialogHeader, 
   DialogTitle as ReauthDialogTitle,
   DialogDescription as ReauthDialogDescription,
   DialogFooter as ReauthDialogFooter,
 } from "@/components/ui/dialog";
-import { EmailAuthProvider } from 'firebase/auth';
+import { EmailAuthProvider, GoogleAuthProvider, reauthenticateWithPopup, reauthenticateWithCredential } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
@@ -97,9 +98,8 @@ export default function SettingsPage() {
       if (defaultTherapistMode !== user.defaultTherapistMode) {
         profileUpdates.defaultTherapistMode = defaultTherapistMode;
       }
-      // Handle empty string for photoURL correctly (store as null)
       const newPhotoURL = selectedAvatarUrl === '' ? null : selectedAvatarUrl;
-      if (newPhotoURL !== (user.photoURL || null)) { // Compare against user.photoURL or null
+      if (newPhotoURL !== (user.photoURL || null)) { 
           profileUpdates.photoURL = newPhotoURL;
       }
 
@@ -128,48 +128,77 @@ export default function SettingsPage() {
     setDarkModeVisual(checked);
   };
 
-  const handleDeleteDataConfirmed = async () => {
-    if (!user || !auth.currentUser) return;
+ const handleDeleteDataConfirmed = async () => {
+    if (!user || !auth.currentUser) {
+      toast({ title: "Error", description: "User not authenticated.", variant: "destructive" });
+      return;
+    }
     
-    // Check provider type
     const isEmailProvider = auth.currentUser.providerData.some(
       (provider) => provider.providerId === EmailAuthProvider.PROVIDER_ID
     );
 
     if (isEmailProvider) {
-      setIsPasswordPromptOpen(true); // Open password prompt dialog
+      setIsPasswordPromptOpen(true);
     } else {
-      // For Google or other OAuth providers, proceed directly to data deletion with re-auth popup
-      await handleFinalDelete();
+      // For Google or other OAuth providers, attempt re-authentication via popup before final delete.
+      // No password input needed for this path initially.
+      try {
+        const provider = new GoogleAuthProvider(); // Assuming Google if not email/password
+        await reauthenticateWithPopup(auth.currentUser, provider);
+        await handleFinalDelete(); // Proceed to delete data after successful re-auth
+      } catch (reauthError: any) {
+        console.error("Re-authentication error:", reauthError);
+        toast({
+          title: "Re-authentication Failed",
+          description: reauthError.message || "Could not re-authenticate. Please try again.",
+          variant: "destructive",
+        });
+        setIsDeleteConfirmationOpen(false); // Close the initial confirmation
+      }
     }
   };
 
   const handleFinalDelete = async (e?: FormEvent) => {
-    e?.preventDefault(); // Prevent form submission if called from form
-    if (!user) return;
+    e?.preventDefault(); 
+    if (!user || !auth.currentUser) {
+       toast({ title: "Error", description: "User not authenticated.", variant: "destructive" });
+       return;
+    }
 
     setIsDeletingData(true);
-    setIsPasswordPromptOpen(false); // Close password prompt if open
+    setIsPasswordPromptOpen(false); 
 
     try {
-      await deleteUserData(passwordForDelete || undefined); // Pass password if it was entered
+      // If it's an email provider and password was entered, re-authenticate with credential
+      if (auth.currentUser.providerData.some(p => p.providerId === EmailAuthProvider.PROVIDER_ID) && passwordForDelete) {
+        const credential = EmailAuthProvider.credential(auth.currentUser.email!, passwordForDelete);
+        await reauthenticateWithCredential(auth.currentUser, credential);
+      }
+      // For Google users, re-authentication with popup should have happened in handleDeleteDataConfirmed
+
+      await deleteUserData(); 
       toast({
         title: "Data Deleted Successfully",
         description: "All your personal data has been removed. Your account is still active.",
       });
-      // Optionally, refresh user state or redirect
-      // router.push('/dashboard'); 
     } catch (error: any) {
       console.error("Data deletion error:", error);
+       let description = error.message || "Could not delete your data.";
+       if (error.code === 'auth/wrong-password') {
+        description = "Incorrect password. Data deletion cancelled.";
+      } else if (error.code === 'auth/requires-recent-login' || error.code === 'auth/user-token-expired') {
+        description = "Your session has expired. Please log out and log back in to perform this action.";
+      }
       toast({
         title: "Data Deletion Failed",
-        description: error.message || "Could not delete your data. Please try re-logging in.",
+        description: description,
         variant: "destructive",
       });
     } finally {
       setIsDeletingData(false);
       setPasswordForDelete('');
-      setIsDeleteConfirmationOpen(false); // Ensure main confirmation is closed
+      setIsDeleteConfirmationOpen(false); 
     }
   };
 
@@ -190,45 +219,45 @@ export default function SettingsPage() {
 
 
   return (
-    <div className="space-y-8 max-w-3xl mx-auto">
+    <div className="space-y-6 sm:space-y-8 max-w-3xl mx-auto p-4 sm:p-0">
       <div>
-        <h1 className="text-3xl font-bold text-foreground">Settings</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Settings</h1>
+        <p className="text-muted-foreground text-sm sm:text-base">
           Manage your account, preferences, and app settings.
         </p>
       </div>
 
-      <Card className="shadow-lg rounded-2xl">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><UserCircle className="h-6 w-6 text-primary" /> Profile Information</CardTitle>
-          <CardDescription>Update your personal details.</CardDescription>
+      <Card className="shadow-lg rounded-xl sm:rounded-2xl">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl"><UserCircle className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Profile Information</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">Update your personal details.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 p-4 sm:p-6">
           <div className="space-y-1">
-            <Label htmlFor="displayName">Display Name</Label>
-            <Input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+            <Label htmlFor="displayName" className="text-sm">Display Name</Label>
+            <Input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="text-sm sm:text-base"/>
           </div>
           <div className="space-y-1">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" value={email} disabled readOnly />
+            <Label htmlFor="email" className="text-sm">Email</Label>
+            <Input id="email" value={email} disabled readOnly  className="text-sm sm:text-base"/>
             <p className="text-xs text-muted-foreground">Email cannot be changed here.</p>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="shadow-lg rounded-2xl">
-        <CardHeader>
-            <CardTitle className="flex items-center gap-2"><UserSquare2 className="h-6 w-6 text-primary" /> Choose Your Avatar</CardTitle>
-            <CardDescription>Select an avatar to represent you in the app.</CardDescription>
+      <Card className="shadow-lg rounded-xl sm:rounded-2xl">
+        <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="flex items-center gap-2 text-lg sm:text-xl"><UserSquare2 className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Choose Your Avatar</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Select an avatar to represent you in the app.</CardDescription>
         </CardHeader>
-        <CardContent>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 p-2 rounded-lg bg-muted/30">
+        <CardContent className="p-4 sm:p-6">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3 p-2 rounded-lg bg-muted/30">
             {avatarOptions.map(avatar => (
                 <button
                 key={avatar.id}
                 onClick={() => setSelectedAvatarUrl(avatar.url)}
                 className={cn(
-                    "flex flex-col items-center p-2 rounded-lg transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background",
+                    "flex flex-col items-center p-1.5 sm:p-2 rounded-lg transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background",
                     selectedAvatarUrl === avatar.url ? "ring-2 ring-primary bg-primary/10" : "hover:bg-primary/5"
                 )}
                 aria-label={`Select avatar ${avatar.name}`}
@@ -239,14 +268,14 @@ export default function SettingsPage() {
                         alt={avatar.name} 
                         width={64} 
                         height={64} 
-                        className="rounded-full object-cover w-16 h-16"
+                        className="rounded-full object-cover w-12 h-12 sm:w-16 sm:h-16"
                     />
                 ) : (
-                    <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
-                        <UserCircle className="w-8 h-8 text-secondary-foreground" />
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-secondary flex items-center justify-center">
+                        <UserCircle className="w-6 h-6 sm:w-8 sm:h-8 text-secondary-foreground" />
                     </div>
                 )}
-                <span className="text-xs mt-1 text-center text-foreground/80 truncate w-full">{avatar.name}</span>
+                <span className="text-[10px] sm:text-xs mt-1 text-center text-foreground/80 truncate w-full">{avatar.name}</span>
                 </button>
             ))}
             </div>
@@ -254,19 +283,19 @@ export default function SettingsPage() {
       </Card>
 
 
-      <Card className="shadow-lg rounded-2xl">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Brain className="h-6 w-6 text-primary" /> App Preferences</CardTitle>
-          <CardDescription>Customize your ThoughtReflex experience.</CardDescription>
+      <Card className="shadow-lg rounded-xl sm:rounded-2xl">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl"><Brain className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> App Preferences</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">Customize your ThoughtReflex experience.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4 sm:space-y-6 p-4 sm:p-6">
           <div className="flex items-center justify-between">
             <div>
-                <Label htmlFor="defaultTherapistMode" className="font-medium">Default Therapist Mode</Label>
+                <Label htmlFor="defaultTherapistMode" className="font-medium text-sm">Default Therapist Mode</Label>
                 <p className="text-xs text-muted-foreground">Choose your preferred AI interaction style.</p>
             </div>
             <Select value={defaultTherapistMode} onValueChange={(value: TherapistMode) => setDefaultTherapistMode(value)}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[150px] sm:w-[180px] text-sm">
                  <div className="flex items-center">
                     {modeIcons[defaultTherapistMode]}
                     <SelectValue placeholder="Select Mode" />
@@ -284,7 +313,7 @@ export default function SettingsPage() {
 
           <div className="flex items-center justify-between">
             <div>
-                <Label htmlFor="notifications" className="font-medium">Enable Notifications</Label>
+                <Label htmlFor="notifications" className="font-medium text-sm">Enable Notifications</Label>
                 <p className="text-xs text-muted-foreground">Receive reminders and updates. (Mocked)</p>
             </div>
             <Switch id="notifications" checked={notificationsEnabled} onCheckedChange={setNotificationsEnabled} />
@@ -294,36 +323,36 @@ export default function SettingsPage() {
           
           <div className="flex items-center justify-between">
              <div>
-                <Label htmlFor="darkMode" className="font-medium">Dark Mode</Label>
+                <Label htmlFor="darkMode" className="font-medium text-sm">Dark Mode</Label>
                 <p className="text-xs text-muted-foreground">Toggle dark theme.</p>
             </div>
             <Switch id="darkMode" checked={darkModeVisual} onCheckedChange={handleThemeChange} /> 
           </div>
         </CardContent>
       </Card>
-       <div className="flex justify-end">
-         <Button onClick={handleSaveChanges} disabled={isSaving || authLoading}>
-            {isSaving ? <Loader2 className="animate-spin mr-2"/> : null}
+       <div className="flex justify-end pt-2">
+         <Button onClick={handleSaveChanges} disabled={isSaving || authLoading} className="text-sm sm:text-base">
+            {isSaving ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : null}
             {isSaving ? 'Saving...' : 'Save All Changes'}
           </Button>
        </div>
 
 
-      <Card className="shadow-lg rounded-2xl">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-6 w-6 text-primary" /> Account & Security</CardTitle>
-          <CardDescription>Manage your account security and data.</CardDescription>
+      <Card className="shadow-lg rounded-xl sm:rounded-2xl">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl"><ShieldCheck className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Account & Security</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">Manage your account security and data.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3 md:space-y-0 md:flex md:flex-wrap md:gap-3">
-            <Button variant="outline" asChild>
+        <CardContent className="space-y-2 sm:space-y-3 p-4 sm:p-6">
+            <Button variant="outline" asChild className="w-full sm:w-auto justify-center">
                 <Link href="/settings/change-password">Change Password</Link>
             </Button>
-            <Button variant="outline" asChild>
+            <Button variant="outline" asChild className="w-full sm:w-auto justify-center">
                 <Link href="/settings/export-data">Export My Data</Link>
             </Button>
             <AlertDialog open={isDeleteConfirmationOpen} onOpenChange={setIsDeleteConfirmationOpen}>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive" className={cn("bg-red-600 hover:bg-red-700 text-white")} onClick={() => setIsDeleteConfirmationOpen(true)}>
+                <Button variant="destructive" className={cn("w-full sm:w-auto justify-center")} onClick={() => setIsDeleteConfirmationOpen(true)}>
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete My Data
                 </Button>
@@ -349,7 +378,7 @@ export default function SettingsPage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-            <Button variant="outline" onClick={signOut} className="w-full md:w-auto">
+            <Button variant="outline" onClick={signOut} className="w-full sm:w-auto justify-center">
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign Out
             </Button>

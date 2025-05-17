@@ -12,13 +12,13 @@ import { useToast } from '@/hooks/use-toast';
 import { useState, FormEvent } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Loader2, Send, Star as StarIcon } from 'lucide-react'; // Renamed to avoid conflict
+import { Loader2, Send, Star as StarIcon } from 'lucide-react'; 
 
 export default function FeedbackPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [testimonialText, setTestimonialText] = useState('');
-  const [rating, setRating] = useState<string>('5'); // Default to 5 stars
+  const [rating, setRating] = useState<string>('5'); 
   const [consentGiven, setConsentGiven] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -42,7 +42,7 @@ export default function FeedbackPage() {
         testimonialText: testimonialText.trim(),
         rating: parseInt(rating, 10),
         consentGiven: consentGiven,
-        isApproved: false, // Requires admin approval
+        isApproved: false, 
         createdAt: serverTimestamp(),
       });
       toast({ title: "Feedback Submitted!", description: "Thank you for sharing your thoughts. Your testimonial will be reviewed." });
@@ -58,34 +58,34 @@ export default function FeedbackPage() {
   };
 
   return (
-    <div className="container mx-auto py-8 px-4 md:px-6 max-w-2xl">
-      <Card className="shadow-2xl rounded-2xl">
-        <CardHeader className="text-center">
-          <StarIcon className="h-10 w-10 text-primary mx-auto mb-3" />
-          <CardTitle className="text-2xl font-bold text-foreground">Share Your Experience</CardTitle>
-          <CardDescription className="text-md text-foreground/80">
+    <div className="container mx-auto py-6 sm:py-8 px-4 max-w-xl sm:max-w-2xl">
+      <Card className="shadow-xl sm:shadow-2xl rounded-xl sm:rounded-2xl">
+        <CardHeader className="text-center p-4 sm:p-6">
+          <StarIcon className="h-8 w-8 sm:h-10 sm:w-10 text-primary mx-auto mb-2 sm:mb-3" />
+          <CardTitle className="text-xl sm:text-2xl font-bold text-foreground">Share Your Experience</CardTitle>
+          <CardDescription className="text-sm sm:text-md text-foreground/80">
             We'd love to hear about your journey with ThoughtReflex! Your feedback helps us grow and inspire others.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-1.5">
-              <Label htmlFor="testimonialText">Your Testimonial</Label>
+        <CardContent className="p-4 sm:p-6">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+            <div className="space-y-1 sm:space-y-1.5">
+              <Label htmlFor="testimonialText" className="text-sm">Your Testimonial</Label>
               <Textarea
                 id="testimonialText"
                 placeholder="Share your thoughts on how ThoughtReflex has helped you..."
                 value={testimonialText}
                 onChange={(e) => setTestimonialText(e.target.value)}
-                rows={6}
-                className="bg-muted/30"
+                rows={5}
+                className="bg-muted/30 text-sm sm:text-base"
                 required
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="rating">Rating (out of 5 stars)</Label>
+            <div className="space-y-1 sm:space-y-1.5">
+              <Label htmlFor="rating" className="text-sm">Rating (out of 5 stars)</Label>
               <Select value={rating} onValueChange={setRating}>
-                <SelectTrigger id="rating" className="w-[180px] bg-muted/30">
+                <SelectTrigger id="rating" className="w-[160px] sm:w-[180px] bg-muted/30 text-sm sm:text-base">
                   <SelectValue placeholder="Select rating" />
                 </SelectTrigger>
                 <SelectContent>
@@ -98,13 +98,13 @@ export default function FeedbackPage() {
               </Select>
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 pt-2">
               <Checkbox
                 id="consentGiven"
                 checked={consentGiven}
                 onCheckedChange={(checked) => setConsentGiven(checked as boolean)}
               />
-              <Label htmlFor="consentGiven" className="text-sm font-normal text-foreground/80">
+              <Label htmlFor="consentGiven" className="text-xs sm:text-sm font-normal text-foreground/80">
                 I agree to let ThoughtReflex use my testimonial (with my display name and avatar) publicly on the website and in other marketing materials.
               </Label>
             </div>
@@ -113,7 +113,7 @@ export default function FeedbackPage() {
                 <p className="text-xs text-muted-foreground">If not checked, your testimonial will only be used internally for feedback.</p>
             )}
 
-            <Button type="submit" className="w-full shadow-md" disabled={isSubmitting}>
+            <Button type="submit" className="w-full shadow-md text-sm sm:text-base" disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
               {isSubmitting ? 'Submitting...' : 'Submit Testimonial'}
             </Button>
@@ -123,3 +123,5 @@ export default function FeedbackPage() {
     </div>
   );
 }
+
+    

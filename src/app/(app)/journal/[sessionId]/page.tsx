@@ -370,21 +370,23 @@ export default function JournalSessionPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-theme(spacing.28)-2rem)] md:h-[calc(100vh-theme(spacing.20)-2rem)] bg-card rounded-2xl shadow-2xl overflow-hidden">
-      <CardHeader className="flex flex-row items-center justify-between p-4 border-b bg-muted/30">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" asChild className="hover:bg-primary/10">
+      <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-4 border-b bg-muted/30">
+        <div className="flex items-center gap-1 sm:gap-2 min-w-0"> {/* Added min-w-0 here */}
+          <Button variant="ghost" size="icon" asChild className="hover:bg-primary/10 shrink-0">
             <Link href="/journal">
               <ArrowLeft className="h-5 w-5 text-primary" />
               <span className="sr-only">Back to Journals</span>
             </Link>
           </Button>
-          <CardTitle className="text-lg md:text-xl font-semibold truncate text-foreground">{sessionTitle}</CardTitle>
+          <div className="min-w-0"> {/* Wrapper for CardTitle to allow truncation */}
+             <CardTitle className="text-base sm:text-lg md:text-xl font-semibold truncate text-foreground">{sessionTitle}</CardTitle>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <Select value={currentTherapistMode} onValueChange={(value: TherapistMode) => setCurrentTherapistMode(value)}>
-            <SelectTrigger className="w-[140px] sm:w-[150px] h-9 text-sm shadow-sm">
+            <SelectTrigger className="w-[110px] sm:w-[150px] h-8 sm:h-9 text-xs sm:text-sm shadow-sm">
               <div className="flex items-center">
-                {React.cloneElement(modeIcons[currentTherapistMode], {className: "mr-1.5 h-4 w-4"})}
+                {React.cloneElement(modeIcons[currentTherapistMode], {className: "mr-1 sm:mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4"})}
                 <SelectValue placeholder="Select Mode" />
               </div>
             </SelectTrigger>
@@ -396,8 +398,8 @@ export default function JournalSessionPage() {
           </Select>
           <Dialog open={isSessionSettingsOpen} onOpenChange={setIsSessionSettingsOpen}>
             <DialogTrigger asChild>
-              <Button variant="ghost" size="icon" disabled={!currentDbSessionId} onClick={() => setEditableSessionTitle(sessionTitle)} className="hover:bg-primary/10">
-                <Settings2 className="h-5 w-5 text-primary" />
+              <Button variant="ghost" size="icon" disabled={!currentDbSessionId} onClick={() => setEditableSessionTitle(sessionTitle)} className="hover:bg-primary/10 h-8 w-8 sm:h-9 sm:w-9">
+                <Settings2 className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                 <span className="sr-only">Session Settings</span>
               </Button>
             </DialogTrigger>
@@ -416,7 +418,7 @@ export default function JournalSessionPage() {
                   className="bg-muted/50"
                 />
               </div>
-              <DialogFooter className="justify-between sm:justify-between gap-2">
+              <DialogFooter className="flex-col sm:flex-row sm:justify-between gap-2 pt-4">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                      <Button variant="destructive" disabled={isDeletingSession} className={cn(buttonVariants({ variant: "destructive" }), "w-full sm:w-auto")}>
@@ -433,8 +435,8 @@ export default function JournalSessionPage() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleDeleteSession} className={cn(buttonVariants({ variant: "destructive" }))}>
-                        Yes, Delete Session
+                      <AlertDialogAction onClick={handleDeleteSession} className={cn(buttonVariants({ variant: "destructive" }))} disabled={isDeletingSession}>
+                         {isDeletingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Yes, Delete Session"}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -449,8 +451,8 @@ export default function JournalSessionPage() {
         </div>
       </CardHeader>
 
-      <ScrollArea className="flex-1 p-4 sm:p-6" viewportRef={viewportRef} ref={scrollAreaRef}>
-        <div className="space-y-6">
+      <ScrollArea className="flex-1 p-4" viewportRef={viewportRef} ref={scrollAreaRef}>
+        <div className="space-y-0"> {/* Removed space-y-6 from here */}
         {messages.map((msg) => (
           <motion.div
             key={msg.id}
@@ -458,19 +460,19 @@ export default function JournalSessionPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, ease: "easeOut" }}
             className={cn(
-              "group flex items-end gap-2.5 max-w-[85%] sm:max-w-[75%] mb-3", 
+              "group flex items-end gap-2 max-w-[85%] sm:max-w-[75%] mb-4", // Added mb-4 here
               msg.sender === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
             )}
           >
-            <Avatar className="h-10 w-10 self-start shadow-sm border-2 border-background"> 
+            <Avatar className="h-8 w-8 sm:h-10 sm:w-10 self-start shadow-sm border-2 border-background"> 
               <AvatarImage src={msg.avatar || undefined} />
-              <AvatarFallback className={cn(msg.sender === 'user' ? 'bg-secondary text-secondary-foreground' : 'bg-primary/20 text-primary')}>
-                {msg.sender === 'user' ? <User className="h-5 w-5" /> : <Brain className="h-5 w-5" />}
+              <AvatarFallback className={cn(msg.sender === 'user' ? 'bg-secondary text-secondary-foreground' : 'bg-primary/20 text-primary text-xs')}>
+                {msg.sender === 'user' ? <User className="h-4 w-4 sm:h-5 sm:w-5" /> : <Brain className="h-4 w-4 sm:h-5 sm:w-5" />}
               </AvatarFallback>
             </Avatar>
             <div
               className={cn(
-                "px-4 py-3 rounded-2xl shadow-md group-hover:shadow-lg transition-shadow duration-200 ease-in-out text-sm", 
+                "px-3 py-2 sm:px-4 sm:py-3 rounded-2xl shadow-md group-hover:shadow-lg transition-shadow duration-200 ease-in-out text-sm", 
                 msg.sender === 'user'
                   ? 'bg-primary text-primary-foreground rounded-br-lg'
                   : 'bg-muted text-foreground rounded-bl-lg'
@@ -478,28 +480,28 @@ export default function JournalSessionPage() {
             >
               <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
                {msg.sender === 'ai' && msg.suggestedGoalText && !msg.isGoalAdded && (
-                <div className="mt-3 pt-3 border-t border-foreground/20">
-                  <p className="text-xs font-semibold text-foreground/80 mb-1.5">Mira's Goal Suggestion:</p>
-                  <p className="text-sm text-foreground/90 italic mb-2">"{msg.suggestedGoalText}"</p>
+                <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-foreground/20">
+                  <p className="text-xs font-semibold text-foreground/80 mb-1 sm:mb-1.5">Mira's Goal Suggestion:</p>
+                  <p className="text-xs sm:text-sm text-foreground/90 italic mb-1.5 sm:mb-2">"{msg.suggestedGoalText}"</p>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="text-xs h-auto py-1.5 px-3 bg-background hover:bg-accent border-primary/30 text-primary hover:text-primary"
+                    className="text-xs h-auto py-1 px-2 sm:py-1.5 sm:px-3 bg-background hover:bg-accent border-primary/30 text-primary hover:text-primary"
                     onClick={() => handleAddSuggestedGoal(msg.id, msg.suggestedGoalText!)}
                   >
-                    <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Add this goal
+                    <PlusCircle className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" /> Add this goal
                   </Button>
                 </div>
               )}
               {msg.sender === 'ai' && msg.suggestedGoalText && msg.isGoalAdded && (
-                  <div className="mt-3 pt-2 border-t border-green-600/30 dark:border-green-400/30">
+                  <div className="mt-2 sm:mt-3 pt-1.5 sm:pt-2 border-t border-green-600/30 dark:border-green-400/30">
                       <p className="text-xs text-green-600 dark:text-green-400 flex items-center font-medium">
-                        <CheckCircle className="mr-1.5 h-4 w-4" /> Goal added to your list!
+                        <CheckCircle className="mr-1 sm:mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Goal added!
                       </p>
                   </div>
               )}
               <p className={cn(
-                  "text-[10px] mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in-out", 
+                  "text-[10px] sm:text-[11px] mt-1.5 sm:mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in-out", 
                   msg.sender === 'user' ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground text-left'
                 )}>
                 {(msg.timestamp instanceof Date ? msg.timestamp : new Date((msg.timestamp as Timestamp).seconds * 1000)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -511,13 +513,13 @@ export default function JournalSessionPage() {
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex items-end gap-2.5 mr-auto mb-3"
+            className="flex items-end gap-2 mr-auto mb-4" // Added mb-4
           >
-            <Avatar className="h-10 w-10 self-start shadow-sm">
+            <Avatar className="h-8 w-8 sm:h-10 sm:w-10 self-start shadow-sm">
                 <AvatarImage src="/logo-ai.png" alt="Mira AI" />
-              <AvatarFallback className="bg-primary/20 text-primary"><Brain className="h-5 w-5 animate-pulse" /></AvatarFallback>
+              <AvatarFallback className="bg-primary/20 text-primary"><Brain className="h-4 w-4 sm:h-5 sm:w-5 animate-pulse" /></AvatarFallback>
             </Avatar>
-            <div className="px-4 py-3 rounded-2xl shadow-md bg-muted text-foreground rounded-bl-lg">
+            <div className="px-3 py-2 sm:px-4 sm:py-3 rounded-2xl shadow-md bg-muted text-foreground rounded-bl-lg">
               <p className="text-sm italic text-muted-foreground">Mira is typing...</p>
             </div>
           </motion.div>
@@ -525,13 +527,13 @@ export default function JournalSessionPage() {
         </div>
       </ScrollArea>
 
-      <form onSubmit={handleSendMessage} className="border-t p-3 sm:p-4 bg-muted/30">
+      <form onSubmit={handleSendMessage} className="border-t p-3 bg-muted/30">
         <div className="relative flex items-center">
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Share your thoughts here..."
-            className="pr-24 sm:pr-28 resize-none min-h-[56px] max-h-[160px] rounded-xl text-base border-input focus:border-primary shadow-sm"
+            className="pr-20 sm:pr-24 resize-none min-h-[50px] sm:min-h-[56px] max-h-[140px] sm:max-h-[160px] rounded-xl text-sm sm:text-base border-input focus:border-primary shadow-sm"
             rows={1}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -540,17 +542,13 @@ export default function JournalSessionPage() {
               }
             }}
           />
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-            <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-primary" onClick={() => toast({title: "Coming Soon!", description:"Voice input will be available in a future update."})}>
-              <Mic className="h-5 w-5" />
+          <div className="absolute right-1.5 sm:right-2 top-1/2 -translate-y-1/2 flex gap-0.5 sm:gap-1">
+            <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-primary h-8 w-8 sm:h-9 sm:w-9" onClick={() => toast({title: "Coming Soon!", description:"Voice input will be available in a future update."})}>
+              <Mic className="h-4 w-4 sm:h-5 sm:w-5" />
               <span className="sr-only">Voice Input</span>
             </Button>
-            {/* <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-primary" onClick={() => toast({title: "Coming Soon!", description:"File attachment will be available soon."})}>
-              <Paperclip className="h-5 w-5" />
-              <span className="sr-only">Attach File</span>
-            </Button> */}
-            <Button type="submit" size="icon" disabled={isLoadingAiResponse || !input.trim()} className="rounded-lg shadow-md">
-              <Send className="h-5 w-5" />
+            <Button type="submit" size="icon" disabled={isLoadingAiResponse || !input.trim()} className="rounded-lg shadow-md h-8 w-8 sm:h-9 sm:w-9">
+              <Send className="h-4 w-4 sm:h-5 sm:w-5" />
               <span className="sr-only">Send Message</span>
             </Button>
           </div>
@@ -560,3 +558,4 @@ export default function JournalSessionPage() {
   );
 }
 
+    

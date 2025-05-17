@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useState, FormEvent } from 'react';
-import { Mail, MessageSquare, Send } from 'lucide-react';
+import { Mail, MessageSquare, Send, Loader2 } from 'lucide-react';
 
 export default function ContactPage() {
   const { toast } = useToast();
@@ -20,10 +20,8 @@ export default function ContactPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    // In a real app, you would send this data to a backend or email service
     console.log({ name, email, message });
 
-    // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     toast({
@@ -37,30 +35,30 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="container mx-auto py-12 px-4 md:px-6 max-w-2xl">
-      <Card className="shadow-2xl rounded-2xl">
-        <CardHeader className="text-center">
-          <Mail className="h-12 w-12 text-primary mx-auto mb-4" />
-          <CardTitle className="text-3xl font-bold text-foreground">Get in Touch</CardTitle>
-          <CardDescription className="text-lg text-foreground/80">
+    <div className="container mx-auto py-8 sm:py-12 px-4 max-w-lg sm:max-w-2xl">
+      <Card className="shadow-xl sm:shadow-2xl rounded-xl sm:rounded-2xl">
+        <CardHeader className="text-center p-4 sm:p-6">
+          <Mail className="h-10 w-10 sm:h-12 sm:w-12 text-primary mx-auto mb-3 sm:mb-4" />
+          <CardTitle className="text-2xl sm:text-3xl font-bold text-foreground">Get in Touch</CardTitle>
+          <CardDescription className="text-base sm:text-lg text-foreground/80">
             We'd love to hear from you! Whether you have a question, feedback, or just want to say hello.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="name" className="text-foreground/90">Full Name</Label>
+        <CardContent className="p-4 sm:p-6">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="name" className="text-foreground/90 text-sm">Full Name</Label>
               <Input 
                 id="name" 
                 placeholder="Your Name" 
                 value={name} 
                 onChange={(e) => setName(e.target.value)} 
                 required 
-                className="bg-muted/30"
+                className="bg-muted/30 text-sm sm:text-base"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-foreground/90">Email Address</Label>
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="email" className="text-foreground/90 text-sm">Email Address</Label>
               <Input 
                 id="email" 
                 type="email" 
@@ -68,11 +66,11 @@ export default function ContactPage() {
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
                 required 
-                className="bg-muted/30"
+                className="bg-muted/30 text-sm sm:text-base"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="message" className="text-foreground/90">Message</Label>
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="message" className="text-foreground/90 text-sm">Message</Label>
               <Textarea 
                 id="message" 
                 placeholder="Your message..." 
@@ -80,13 +78,13 @@ export default function ContactPage() {
                 onChange={(e) => setMessage(e.target.value)} 
                 required 
                 rows={5}
-                className="bg-muted/30"
+                className="bg-muted/30 text-sm sm:text-base"
               />
             </div>
-            <Button type="submit" className="w-full shadow-md" disabled={isSubmitting}>
+            <Button type="submit" className="w-full shadow-md text-sm sm:text-base" disabled={isSubmitting}>
               {isSubmitting ? (
                 <>
-                  <MessageSquare className="mr-2 h-4 w-4 animate-pulse" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Sending...
                 </>
               ) : (
@@ -102,3 +100,5 @@ export default function ContactPage() {
     </div>
   );
 }
+
+    
