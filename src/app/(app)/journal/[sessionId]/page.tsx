@@ -7,7 +7,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, ImageIcon } from 'lucide-react';
+import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, ImageIcon, Save } from 'lucide-react';
 import { useAuth, UserProfile } from '@/contexts/auth-context'; 
 import { CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { cn } from '@/lib/utils';
-import { getTherapistResponse, TherapistModeInput, AiChatMessage } from '@/ai/flows/therapist-modes';
+import { getTherapistResponse, TherapistModeInput, AiChatMessage, ReframeThoughtOutput } from '@/ai/flows/therapist-modes';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, addDoc, collection, query, orderBy, onSnapshot, serverTimestamp, Timestamp, setDoc, where, getDocs, limit, deleteDoc, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -34,6 +34,8 @@ interface Message {
   name: string;
   suggestedGoalText?: string;
   isGoalAdded?: boolean;
+  reframingData?: ReframeThoughtOutput;
+  isReframingSaved?: boolean;
 }
 
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
@@ -45,7 +47,8 @@ const getISODateString = (date: Date): string => {
 };
 
 export default function JournalSessionPage() {
-  const params = useParams();
+  const rawParams = useParams();
+  const params = { ...rawParams }; // Shallow copy to avoid enumeration issues
   const router = useRouter();
   const { toast } = useToast();
   const initialSessionId = params.sessionId as string;
@@ -249,7 +252,7 @@ export default function JournalSessionPage() {
         mode: currentTherapistMode,
         goal: activeGoalText,
         messageHistory: historyForAI,
-        mbtiType: user?.mbtiType, // Pass MBTI type
+        mbtiType: user?.mbtiType,
       };
 
       const aiResponse = await getTherapistResponse(aiFlowInput);
@@ -262,6 +265,8 @@ export default function JournalSessionPage() {
         avatar: '/logo-ai.png',
         suggestedGoalText: aiResponse.suggestedGoalText,
         isGoalAdded: false,
+        reframingData: aiResponse.reframingData,
+        isReframingSaved: false,
       };
       await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), aiMessageData);
 
@@ -353,6 +358,30 @@ export default function JournalSessionPage() {
     }
   };
 
+  const handleSaveMindShift = async (messageId: string, reframingData: ReframeThoughtOutput) => {
+    if (!user || !currentDbSessionId) return;
+    try {
+        await addDoc(collection(db, 'users', user.uid, 'mindShifts'), {
+            ...reframingData,
+            userId: user.uid,
+            createdAt: serverTimestamp(),
+        });
+        toast({ title: "Mind Shift Saved!", description: "Your reframed thought has been saved."});
+
+        const messageRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId, 'messages', messageId);
+        await updateDoc(messageRef, { isReframingSaved: true });
+
+        setMessages(prevMessages => 
+            prevMessages.map(m => 
+                m.id === messageId ? { ...m, isReframingSaved: true } : m
+            )
+        );
+    } catch (error) {
+        console.error("Error saving mind shift:", error);
+        toast({ title: "Error", description: "Could not save mind shift.", variant: "destructive" });
+    }
+  };
+
 
   const modeIcons = {
     Therapist: <Brain className="mr-2 h-4 w-4" />,
@@ -422,7 +451,7 @@ export default function JournalSessionPage() {
               <DialogFooter className="flex-col sm:flex-row sm:justify-between gap-2 pt-4">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                     <Button variant="destructive" disabled={isDeletingSession} className={cn(buttonVariants({ variant: "destructive" }), "w-full sm:w-auto")}>
+                     <Button variant="destructive" className={cn( "w-full sm:w-auto")} disabled={isDeletingSession}>
                       {isDeletingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                       Delete Session
                     </Button>
@@ -501,6 +530,26 @@ export default function JournalSessionPage() {
                       </p>
                   </div>
               )}
+              {msg.sender === 'ai' && msg.reframingData && !msg.isReframingSaved && (
+                  <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-purple-500/30">
+                    <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mb-1.5">Mira's Mind Shift Suggestion:</p>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-auto py-1 px-2 sm:py-1.5 sm:px-3 bg-background hover:bg-accent border-purple-500/50 text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300"
+                        onClick={() => handleSaveMindShift(msg.id, msg.reframingData!)}
+                    >
+                       <Save className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" /> Save this Mind Shift
+                    </Button>
+                  </div>
+              )}
+              {msg.sender === 'ai' && msg.reframingData && msg.isReframingSaved && (
+                  <div className="mt-2 sm:mt-3 pt-1.5 sm:pt-2 border-t border-green-600/30 dark:border-green-400/30">
+                      <p className="text-xs text-green-600 dark:text-green-400 flex items-center font-medium">
+                        <CheckCircle className="mr-1 sm:mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Mind Shift Saved!
+                      </p>
+                  </div>
+              )}
               <p className={cn(
                   "text-[10px] sm:text-[11px] mt-1.5 sm:mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in-out", 
                   msg.sender === 'user' ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground text-left'
@@ -558,3 +607,5 @@ export default function JournalSessionPage() {
     </div>
   );
 }
+
+    

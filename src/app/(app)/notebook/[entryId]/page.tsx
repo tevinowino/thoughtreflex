@@ -3,7 +3,7 @@
 
 import { useState, useEffect, FormEvent, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
+import { Button, buttonVariants } from '@/components/ui/button'; 
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
@@ -23,7 +23,8 @@ const formatTimestamp = (date: Date | undefined | null): string => {
 
 
 export default function NotebookEntryPage() {
-  const params = useParams();
+  const rawParams = useParams();
+  const params = { ...rawParams }; // Shallow copy
   const router = useRouter();
   const { toast } = useToast();
   const entryIdParams = params.entryId as string;
@@ -238,3 +239,4 @@ export default function NotebookEntryPage() {
   );
 }
 
+    

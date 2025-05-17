@@ -14,7 +14,8 @@ import type { WeeklyRecap } from '../page'; // Import the interface
 import { useToast } from '@/hooks/use-toast';
 
 export default function RecapDetailPage() {
-  const params = useParams();
+  const rawParams = useParams();
+  const params = { ...rawParams }; // Shallow copy
   const router = useRouter();
   const { toast } = useToast();
   const recapId = params.recapId as string;
