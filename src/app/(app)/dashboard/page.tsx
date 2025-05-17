@@ -206,168 +206,172 @@ export default function DashboardPage() {
 
 
   return (
-    <div className="space-y-8 sm:space-y-10 md:space-y-12 p-4 md:p-6 lg:p-8 bg-gradient-to-br from-background to-background/95">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6 backdrop-blur-sm p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-primary/10">
-        <div className="transform transition-all duration-500 hover:scale-[1.02]">
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-primary to-primary/80 tracking-tight">Welcome, {user?.displayName?.split(' ')[0] || 'User'}!</h1>
-          <p className="text-lg sm:text-xl text-muted-foreground/90 mt-2 sm:mt-3 font-medium leading-relaxed">
-            Ready to reflect and grow? Here's your personalized space.
-          </p>
+    <div className="max-w-[2000px] mx-auto p-4 lg:p-8 space-y-6 lg:space-y-10">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-background/95 to-background p-6 lg:p-8">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+          <div className="transform transition hover:translate-x-2">
+            <h1 className="text-4xl lg:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary via-primary/90 to-primary/80">{user?.displayName?.split(' ')[0] || 'User'}</h1>
+            <p className="mt-3 text-lg lg:text-xl text-muted-foreground">
+              Your personal space for reflection and growth.
+            </p>
+          </div>
+          <Button asChild size="lg" className="w-full lg:w-auto shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 bg-gradient-to-r from-primary to-primary/90 rounded-2xl">
+            <Link href="/journal/new">
+              <Edit3 className="mr-3 h-5 w-5" /> New Journal Entry
+            </Link>
+          </Button>
         </div>
-        <Button asChild size="lg" className="shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:scale-110 bg-gradient-to-r from-primary to-primary/90 rounded-xl sm:rounded-2xl text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-3">
-          <Link href="/journal/new">
-            <Edit3 className="mr-2 sm:mr-3 h-5 w-5 sm:h-6 sm:w-6 animate-pulse" /> Start New Journal Session
-          </Link>
-        </Button>
       </div>
 
-      <div className="grid gap-4 sm:gap-6 md:gap-8 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {/* Log Your Mood Card */}
-        <DashboardCard className="backdrop-blur-md bg-card/95 hover:translate-y-[-6px] sm:hover:translate-y-[-8px]">
-          <DashboardCardHeader title="Log Your Mood" description="How are you feeling today?" icon={<Smile className="h-6 w-6 sm:h-7 sm:w-7" />} />
-          <CardContent className="flex-grow px-4 sm:px-6 pb-4 sm:pb-6 pt-0 space-y-3">
-            <div className="flex justify-around gap-2">
-              <Button onClick={() => handleLogMood('positive')} variant={currentDayMood === 'positive' ? "default" : "outline"} className="flex-1 h-12 bg-green-500/20 hover:bg-green-500/30 border-green-500/50 text-green-700 dark:text-green-300 dark:hover:bg-green-500/40">
-                <Smile className="h-5 w-5 mr-2" /> Good
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        <DashboardCard className="bg-card/90 backdrop-filter backdrop-blur-lg transform transition-all duration-300 hover:-translate-y-2">
+          <DashboardCardHeader title="Daily Mood" description="Track your emotional journey" icon={<Smile className="h-6 w-6" />} />
+          <CardContent className="p-4">
+            <div className="grid grid-cols-3 gap-3">
+              <Button onClick={() => handleLogMood('positive')} variant={currentDayMood === 'positive' ? "default" : "outline"} 
+                className="h-12 bg-green-500/10 hover:bg-green-500/20 border-green-500/30">
+                <Smile className="h-5 w-5" />
               </Button>
-              <Button onClick={() => handleLogMood('neutral')} variant={currentDayMood === 'neutral' ? "default" : "outline"} className="flex-1 h-12 bg-yellow-500/20 hover:bg-yellow-500/30 border-yellow-500/50 text-yellow-700 dark:text-yellow-400 dark:hover:bg-yellow-500/40">
-                <Meh className="h-5 w-5 mr-2" /> Neutral
+              <Button onClick={() => handleLogMood('neutral')} variant={currentDayMood === 'neutral' ? "default" : "outline"} 
+                className="h-12 bg-yellow-500/10 hover:bg-yellow-500/20 border-yellow-500/30">
+                <Meh className="h-5 w-5" />
               </Button>
-              <Button onClick={() => handleLogMood('negative')} variant={currentDayMood === 'negative' ? "default" : "outline"} className="flex-1 h-12 bg-red-500/20 hover:bg-red-500/30 border-red-500/50 text-red-700 dark:text-red-400 dark:hover:bg-red-500/40">
-                <Frown className="h-5 w-5 mr-2" /> Bad
+              <Button onClick={() => handleLogMood('negative')} variant={currentDayMood === 'negative' ? "default" : "outline"} 
+                className="h-12 bg-red-500/10 hover:bg-red-500/20 border-red-500/30">
+                <Frown className="h-5 w-5" />
               </Button>
             </div>
           </CardContent>
-           <CardFooter className="p-4 sm:p-5 mt-auto border-t border-primary/10">
-             {loadingMood ? (
-                <div className="flex items-center justify-center w-full"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
-             ) : currentDayMood ? (
-                <div className={`w-full text-center p-2 rounded-md text-sm font-medium text-white ${moodConfig[currentDayMood].color} ${moodConfig[currentDayMood].darkColor}`}>
-                  {moodConfig[currentDayMood].icon} {moodConfig[currentDayMood].text}
-                </div>
-              ) : (
-                <p className="text-xs sm:text-sm text-muted-foreground/90 text-center w-full font-medium">Log your mood to see it reflected here.</p>
-              )}
+          <CardFooter className="p-4 border-t border-border/50">
+            {loadingMood ? (
+              <div className="w-full flex justify-center">
+                <Loader2 className="h-5 w-5 animate-spin" />
+              </div>
+            ) : currentDayMood ? (
+              <div className={`w-full p-2 rounded-xl text-center text-white ${moodConfig[currentDayMood].color}`}>
+                {moodConfig[currentDayMood].text}
+              </div>
+            ) : (
+              <p className="text-sm text-center text-muted-foreground w-full">Log today's mood</p>
+            )}
           </CardFooter>
         </DashboardCard>
 
-        <DashboardCard className="backdrop-blur-md bg-card/95 hover:translate-y-[-6px] sm:hover:translate-y-[-8px]">
-          <DashboardCardHeader title="Recent Journals" description="Continue your journey of self-reflection." icon={<BookText className="h-6 w-6 sm:h-7 sm:w-7 animate-pulse"/>} />
-          <CardContent className="flex-grow px-4 sm:px-6 pb-4 sm:pb-6 pt-0">
+        <DashboardCard className="bg-card/90 backdrop-filter backdrop-blur-lg transform transition-all duration-300 hover:-translate-y-2">
+          <DashboardCardHeader title="Journal Entries" description="Your recent reflections" icon={<BookText className="h-6 w-6" />} />
+          <CardContent className="p-4">
             {loadingJournals ? (
-              <div className="flex items-center justify-center h-24 sm:h-32"><Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-primary" /></div>
+              <div className="h-[200px] flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
             ) : recentJournals.length > 0 ? (
-              <ul className="space-y-3 sm:space-y-4">
+              <ul className="space-y-3">
                 {recentJournals.map(journal => (
-                  <li key={journal.id} className="group transform transition-all duration-300">
-                    <Link href={`/journal/${journal.id}`} className="block p-3 sm:p-4 rounded-xl hover:bg-primary/5 transition-all duration-300 border border-transparent hover:border-primary/20">
-                      <h4 className="font-semibold text-primary group-hover:text-primary/80 group-hover:translate-x-1 transition-all duration-300 text-base sm:text-lg truncate">{journal.title}</h4>
-                      <p className="text-xs sm:text-sm text-muted-foreground/80 mt-0.5 sm:mt-1">
-                        Last entry: {journal.lastUpdatedAt.toLocaleDateString()}
-                      </p>
+                  <li key={journal.id}>
+                    <Link href={`/journal/${journal.id}`} className="block p-3 rounded-xl hover:bg-primary/5 border border-border/50 hover:border-primary/20">
+                      <h4 className="font-medium truncate">{journal.title}</h4>
+                      <p className="text-sm text-muted-foreground mt-1">{journal.lastUpdatedAt.toLocaleDateString()}</p>
                     </Link>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-sm sm:text-base text-muted-foreground/90 p-3 sm:p-4 text-center italic">No recent journal entries.</p>
+              <p className="text-center text-muted-foreground p-4">Start your first journal entry</p>
             )}
           </CardContent>
-          <CardFooter className="p-4 sm:p-5 mt-auto border-t border-primary/10">
-            <Button variant="ghost" asChild className="w-full text-primary justify-start hover:bg-primary/10 rounded-lg sm:rounded-xl text-sm sm:text-base">
-              <Link href="/journal">View All Journals <ArrowRight className="ml-auto h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 group-hover:translate-x-1"/></Link>
+          <CardFooter className="p-4 border-t border-border/50">
+            <Button variant="ghost" asChild className="w-full">
+              <Link href="/journal">All Journals <ArrowRight className="ml-2 h-4 w-4" /></Link>
             </Button>
           </CardFooter>
         </DashboardCard>
 
-        <DashboardCard className="backdrop-blur-md bg-card/95 hover:translate-y-[-6px] sm:hover:translate-y-[-8px]">
-          <DashboardCardHeader title="Active Goals" description="Track your journey to success." icon={<Target className="h-6 w-6 sm:h-7 sm:w-7 animate-pulse"/>} />
-          <CardContent className="flex-grow px-4 sm:px-6 pb-4 sm:pb-6 pt-0">
-             {loadingGoals ? (
-              <div className="flex items-center justify-center h-24 sm:h-32"><Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-primary" /></div>
+        <DashboardCard className="bg-card/90 backdrop-filter backdrop-blur-lg transform transition-all duration-300 hover:-translate-y-2">
+          <DashboardCardHeader title="Goals" description="Your active objectives" icon={<Target className="h-6 w-6" />} />
+          <CardContent className="p-4">
+            {loadingGoals ? (
+              <div className="h-[200px] flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
             ) : activeGoals.length > 0 ? (
-              <ul className="space-y-3 sm:space-y-4">
+              <ul className="space-y-3">
                 {activeGoals.map(goal => (
-                  <li key={goal.id} className="text-sm sm:text-base text-foreground bg-primary/5 p-3 sm:p-4 rounded-xl truncate shadow-lg hover:shadow-xl transition-all duration-300 border border-primary/10 hover:border-primary/30 hover:translate-x-1">
+                  <li key={goal.id} className="p-3 rounded-xl bg-primary/5 border border-border/50">
                     {goal.text}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-sm sm:text-base text-muted-foreground/90 p-3 sm:p-4 text-center italic">No active goals set yet.</p>
+              <p className="text-center text-muted-foreground p-4">Set your first goal</p>
             )}
           </CardContent>
-          <CardFooter className="p-4 sm:p-5 mt-auto border-t border-primary/10">
-            <Button variant="ghost" asChild className="w-full text-primary justify-start hover:bg-primary/10 rounded-lg sm:rounded-xl text-sm sm:text-base">
-              <Link href="/goals">Manage Goals <ArrowRight className="ml-auto h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 group-hover:translate-x-1"/></Link>
+          <CardFooter className="p-4 border-t border-border/50">
+            <Button variant="ghost" asChild className="w-full">
+              <Link href="/goals">Manage Goals <ArrowRight className="ml-2 h-4 w-4" /></Link>
             </Button>
-          </CardFooter>
-        </DashboardCard>
-        
-        <DashboardCard className="backdrop-blur-md bg-card/95 hover:translate-y-[-6px] sm:hover:translate-y-[-8px]">
-          <DashboardCardHeader title="Journaling Streak" description="Keep your momentum soaring!" icon={<Flame className="h-6 w-6 sm:h-7 sm:w-7 animate-pulse"/>} />
-          <CardContent className="space-y-3 sm:space-y-4 text-center flex-grow flex flex-col justify-center items-center p-4 sm:p-6">
-            <div className="text-6xl sm:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-primary to-primary/80">{currentStreak}</div>
-            <p className="text-lg sm:text-xl font-medium text-muted-foreground/90">{currentStreak === 1 ? 'Day' : 'Days'}</p>
-            <p className="text-xs sm:text-sm text-muted-foreground/80">Longest Streak: {longestStreak} {longestStreak === 1 ? 'day' : 'days'}</p>
-            {currentStreak === 0 && <p className="text-sm sm:text-base text-muted-foreground/90 mt-2 sm:mt-3 italic">Start your journey today!</p>}
-            {currentStreak > 0 && <p className="text-sm sm:text-base text-green-500 dark:text-green-400 font-semibold mt-2 sm:mt-3">Outstanding progress! Keep shining! ✨</p>}
-          </CardContent>
-           <CardFooter className="p-4 sm:p-5 mt-auto border-t border-primary/10">
-            <p className="text-xs sm:text-sm text-muted-foreground/90 text-center w-full font-medium">Journal daily to build your legendary streak.</p>
           </CardFooter>
         </DashboardCard>
 
-        <DashboardCard className="backdrop-blur-md bg-card/95 hover:translate-y-[-6px] sm:hover:translate-y-[-8px]">
-          <DashboardCardHeader title="Weekly Recap" description="Reflect on your weekly journey." icon={<CalendarCheck className="h-6 w-6 sm:h-7 sm:w-7 animate-pulse"/>} />
-          <CardContent className="flex-grow flex flex-col items-center justify-center text-center p-4 sm:p-6">
-            {loadingRecap ? (
-                <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-primary" />
-            ) : isRecapAvailable ? (
-                 <p className="text-base sm:text-lg text-foreground font-medium">Your latest weekly insights await! ✨</p>
-            ) : (
-                 <p className="text-sm sm:text-base text-muted-foreground/90 italic">Keep journaling to unlock your weekly insights!</p>
+        <DashboardCard className="bg-card/90 backdrop-filter backdrop-blur-lg transform transition-all duration-300 hover:-translate-y-2">
+          <DashboardCardHeader title="Streak" description="Your consistency score" icon={<Flame className="h-6 w-6" />} />
+          <CardContent className="p-4 text-center">
+            <div className="text-6xl font-bold text-primary">{currentStreak}</div>
+            <p className="mt-2 text-lg">{currentStreak === 1 ? 'Day' : 'Days'}</p>
+            <p className="text-sm text-muted-foreground mt-1">Best: {longestStreak} days</p>
+            {currentStreak > 0 && (
+              <p className="mt-4 text-sm text-green-500">Keep going strong! 🌟</p>
             )}
           </CardContent>
-          <CardFooter className="p-4 sm:p-5 mt-auto border-t border-primary/10">
-            <Button variant="ghost" asChild className="w-full text-primary justify-start hover:bg-primary/10 rounded-lg sm:rounded-xl text-sm sm:text-base">
-              <Link href="/recaps">View Recaps <ArrowRight className="ml-auto h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 group-hover:translate-x-1"/></Link>
-            </Button>
+          <CardFooter className="p-4 border-t border-border/50">
+            <p className="text-sm text-center text-muted-foreground w-full">Journal daily to maintain your streak</p>
           </CardFooter>
         </DashboardCard>
       </div>
 
-      <DashboardCard className="lg:col-span-2 xl:col-span-4 backdrop-blur-md bg-card/95 hover:translate-y-[-6px] sm:hover:translate-y-[-8px]">
-        <CardHeader className="pb-4 sm:pb-6 p-4 sm:p-6 md:p-8">
-            <div className="flex items-center gap-3 sm:gap-4 mb-1 sm:mb-2">
-                <span className="p-2 sm:p-3 bg-primary/10 rounded-xl sm:rounded-2xl text-primary">
-                    <Sparkles className="h-6 w-6 sm:h-8 sm:w-8 animate-pulse" />
-                </span>
-                <CardTitle className="text-xl sm:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-primary to-primary/80">Discover Insights</CardTitle>
-            </div>
-            <CardDescription className="text-base sm:text-lg text-muted-foreground/90">Uncover patterns and gain deeper understanding of your emotional landscape.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col md:flex-row items-center gap-6 sm:gap-10 pt-0 p-4 sm:p-6 md:p-8">
-          <div className="flex-1 space-y-4 sm:space-y-6">
-            <p className="text-foreground/90 text-base sm:text-lg leading-relaxed">
-              ThoughtReflex helps you identify recurring themes, emotional trends, and offers personalized suggestions. 
-              These insights can empower you to make positive changes and understand yourself better.
-            </p>
-            <Button variant="outline" asChild className="shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:scale-105 rounded-lg sm:rounded-xl border-primary/20 text-sm sm:text-base">
-              <Link href="/insights">Explore Your Insights <ArrowRight className="ml-2 sm:ml-3 h-4 w-4 sm:h-5 sm:w-5 animate-pulse"/></Link>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <DashboardCard className="bg-card/90 backdrop-filter backdrop-blur-lg transform transition-all duration-300 hover:-translate-y-2">
+          <DashboardCardHeader title="Weekly Review" description="Your progress this week" icon={<CalendarCheck className="h-6 w-6" />} />
+          <CardContent className="p-6 text-center">
+            {loadingRecap ? (
+              <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+            ) : isRecapAvailable ? (
+              <p className="text-lg">Your weekly insights are ready!</p>
+            ) : (
+              <p className="text-muted-foreground">Continue journaling for insights</p>
+            )}
+          </CardContent>
+          <CardFooter className="p-4 border-t border-border/50">
+            <Button variant="ghost" asChild className="w-full">
+              <Link href="/recaps">View Recaps <ArrowRight className="ml-2 h-4 w-4" /></Link>
             </Button>
-          </div>
-           <div className="flex-shrink-0 w-full md:w-2/5 lg:w-1/3 transform transition-all duration-500 hover:scale-105">
-            <Image 
-              src="/images/dashboard/insights-promo.png" 
-              alt="Abstract representation of personal insights" 
-              width={600} 
-              height={600} 
-              className="rounded-xl sm:rounded-2xl object-cover shadow-2xl hover:shadow-3xl transition-all duration-500"
-            />
-          </div>
-        </CardContent>
-      </DashboardCard>
+          </CardFooter>
+        </DashboardCard>
+
+        <DashboardCard className="bg-card/90 backdrop-filter backdrop-blur-lg transform transition-all duration-300 hover:-translate-y-2">
+          <DashboardCardHeader title="Insights" description="Understand your patterns" icon={<Sparkles className="h-6 w-6" />} />
+          <CardContent className="p-6">
+            <div className="flex flex-col lg:flex-row items-center gap-6">
+              <div className="flex-1">
+                <p className="text-lg leading-relaxed">
+                  Discover patterns in your emotional journey and get personalized insights.
+                </p>
+                <Button variant="outline" asChild className="mt-4">
+                  <Link href="/insights">View Insights <ArrowRight className="ml-2 h-4 w-4" /></Link>
+                </Button>
+              </div>
+              <div className="w-full lg:w-1/3">
+                <Image 
+                  src="/images/dashboard/insights-promo.png" 
+                  alt="Insights visualization" 
+                  width={300} 
+                  height={300} 
+                  className="rounded-xl shadow-lg"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </DashboardCard>
+      </div>
     </div>
-  );
+  )
 }
