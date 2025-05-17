@@ -1,7 +1,7 @@
 
 'use client';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button'; // Added buttonVariants
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input'; // For search
 import { PlusCircle, NotebookPen as NotebookIcon, Loader2, Edit3, ShieldCheck, Search, Trash2 } from 'lucide-react';
@@ -137,7 +137,7 @@ export default function NotebookPage() {
           placeholder="Search notebook entries..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10 pr-4 py-2 w-full rounded-lg shadow-sm"
+          className="pl-10 pr-4 py-2 w-full rounded-lg shadow-sm bg-card"
         />
       </div>
 
@@ -182,8 +182,9 @@ export default function NotebookPage() {
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive" outline onClick={() => setEntryToDelete(entry.id)} className="shadow-sm hover:shadow-md">
-                        <Trash2 className="mr-0 sm:mr-2 h-4 w-4"/> <span className="hidden sm:inline">Delete</span>
+                    <Button variant="ghost" size="icon" onClick={() => setEntryToDelete(entry.id)} className="text-destructive hover:text-destructive-foreground hover:bg-destructive/90 h-9 w-9">
+                        <Trash2 className="h-4 w-4"/>
+                        <span className="sr-only">Delete</span>
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
@@ -195,7 +196,7 @@ export default function NotebookPage() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel onClick={() => setEntryToDelete(null)}>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleDeleteEntry} className={cn(Button({variant: "destructive"}))}>Delete</AlertDialogAction>
+                      <AlertDialogAction onClick={handleDeleteEntry} className={cn(buttonVariants({variant: "destructive"}))}>Delete</AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
@@ -236,3 +237,4 @@ export default function NotebookPage() {
     </div>
   );
 }
+
