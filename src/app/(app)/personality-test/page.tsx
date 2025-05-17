@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, TestTube2, ArrowLeft } from 'lucide-react';
+import { Loader2, Save, TestTube2, ArrowLeft, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 
 const mbtiTypes = [
@@ -94,7 +94,16 @@ export default function PersonalityTestPage() {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              If you're unsure of your type, you can find many free tests online or select "Not Sure".
+              If you're unsure of your type, you can{' '}
+              <a 
+                href="https://www.16personalities.com/free-personality-test" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary hover:underline inline-flex items-center gap-1"
+              >
+                take a free test online <ExternalLink className="h-3 w-3" />
+              </a>
+              {' '}or select "Not Sure".
             </p>
           </div>
           <Button onClick={handleSaveMbtiType} className="w-full shadow-md" disabled={isSaving || authLoading}>
