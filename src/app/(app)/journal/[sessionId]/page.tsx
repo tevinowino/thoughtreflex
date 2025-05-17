@@ -7,7 +7,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle } from 'lucide-react';
+import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, ImageIcon } from 'lucide-react';
 import { useAuth, UserProfile } from '@/contexts/auth-context'; 
 import { CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -248,7 +248,8 @@ export default function JournalSessionPage() {
         userInput: userMessageText,
         mode: currentTherapistMode,
         goal: activeGoalText,
-        messageHistory: historyForAI 
+        messageHistory: historyForAI,
+        mbtiType: user?.mbtiType, // Pass MBTI type
       };
 
       const aiResponse = await getTherapistResponse(aiFlowInput);

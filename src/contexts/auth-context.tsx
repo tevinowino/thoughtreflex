@@ -15,7 +15,6 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
   reauthenticateWithPopup,
-  // deleteUser, // No longer deleting the auth user
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc, Timestamp, collection, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
@@ -29,6 +28,7 @@ export interface UserProfile {
   currentStreak?: number;
   longestStreak?: number;
   lastJournalDate?: string; // Store as YYYY-MM-DD string
+  mbtiType?: string; // e.g., "INFJ", "ESTP"
 }
 
 interface AuthContextType {
@@ -41,7 +41,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   updateUserProfile: (details: Partial<UserProfile>) => Promise<void>;
   refreshUserProfile: () => Promise<void>;
-  deleteUserData: (currentPassword?: string) => Promise<void>; // Renamed
+  deleteUserData: (currentPassword?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -58,6 +58,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (userDocSnap.exists()) {
       setUser(userDocSnap.data() as UserProfile);
     } else {
+      // This case should ideally not happen if handleAuthSuccess runs on first login/signup
+      // But as a fallback, create a basic profile.
       const newUserProfile: UserProfile = {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
@@ -67,6 +69,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         currentStreak: 0,
         longestStreak: 0,
         lastJournalDate: '',
+        mbtiType: undefined, // Initialize mbtiType
       };
       await setDoc(userDocRef, newUserProfile, { merge: true });
       setUser(newUserProfile);
@@ -101,6 +104,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     if (userDocSnap.exists()) {
       userProfileData = userDocSnap.data() as UserProfile;
+      // Ensure all fields are present, especially new ones like mbtiType
       userProfileData = {
         ...userProfileData,
         uid: firebaseUser.uid,
@@ -111,6 +115,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         longestStreak: userProfileData.longestStreak || 0,
         lastJournalDate: userProfileData.lastJournalDate || '',
         defaultTherapistMode: userProfileData.defaultTherapistMode || 'Therapist',
+        mbtiType: userProfileData.mbtiType || undefined,
       };
     } else {
       userProfileData = {
@@ -122,6 +127,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         currentStreak: 0,
         longestStreak: 0,
         lastJournalDate: '',
+        mbtiType: undefined,
       };
     }
     
@@ -207,7 +213,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (details.displayName && details.displayName !== auth.currentUser.displayName) {
         await updateFirebaseProfile(auth.currentUser, { displayName: details.displayName });
       }
-      if (details.photoURL !== undefined && details.photoURL !== auth.currentUser.photoURL) { // Check for undefined to allow clearing photoURL
+      if (details.photoURL !== undefined && details.photoURL !== auth.currentUser.photoURL) { 
          await updateFirebaseProfile(auth.currentUser, { photoURL: details.photoURL });
       }
 
@@ -233,7 +239,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
 
     try {
-      // Re-authenticate user
       const currentUser = auth.currentUser;
       if (currentUser.providerData.some(p => p.providerId === EmailAuthProvider.PROVIDER_ID)) {
         if (!currentPassword) {
@@ -248,7 +253,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         throw new Error('Re-authentication method not supported for this user.');
       }
 
-      // Delete Firestore data
       const batch = writeBatch(db);
       const collectionsToDelete = ['goals', 'journalSessions', 'notebookEntries', 'weeklyRecaps'];
 
@@ -256,7 +260,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const collRef = collection(db, 'users', user.uid, collName);
         const snapshot = await getDocs(collRef);
         snapshot.forEach(async (docSnap) => {
-          // For journalSessions, delete messages subcollection first
           if (collName === 'journalSessions') {
             const messagesCollRef = collection(db, 'users', user.uid, 'journalSessions', docSnap.id, 'messages');
             const messagesSnapshot = await getDocs(messagesCollRef);
@@ -266,13 +269,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
       }
       
-      // Delete the main user profile document
       const userDocRef = doc(db, 'users', user.uid);
-      batch.delete(userDocRef);
-
-      await batch.commit(); // Commit all batched deletes
-
-      // Re-initialize user profile in Firestore
+      // Instead of deleting, we re-initialize
       const freshUserProfile: UserProfile = {
         uid: currentUser.uid,
         email: currentUser.email,
@@ -282,20 +280,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         currentStreak: 0,
         longestStreak: 0,
         lastJournalDate: '',
+        mbtiType: undefined, // Reset MBTI type
       };
-      await setDoc(userDocRef, freshUserProfile);
-      setUser(freshUserProfile); // Update local state with the fresh profile
-      
-      // router.push('/dashboard'); // Optionally navigate, or let them stay on settings
+      batch.set(userDocRef, freshUserProfile); // Set replaces the document
 
+      await batch.commit(); 
+      setUser(freshUserProfile);
+      
     } catch (err) {
       handleAuthError(err as AuthError);
-      throw err; // Re-throw to be caught by the calling component
+      throw err; 
     } finally {
       setLoading(false);
     }
   };
-
 
   return (
     <AuthContext.Provider value={{ 
@@ -308,7 +306,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         signOut, 
         updateUserProfile, 
         refreshUserProfile,
-        deleteUserData // Updated function name
+        deleteUserData
     }}>
       {children}
     </AuthContext.Provider>
@@ -322,5 +320,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
-    

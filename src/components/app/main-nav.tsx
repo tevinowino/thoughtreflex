@@ -17,7 +17,8 @@ import {
   Settings,
   CalendarCheck,
   NotebookPen, 
-  Star, // Added Star icon
+  Star,
+  TestTube2, // Added TestTube2 icon
 } from 'lucide-react';
 
 const navItems = [
@@ -27,7 +28,8 @@ const navItems = [
   { href: '/goals', label: 'Goals', icon: <Target /> },
   { href: '/insights', label: 'Insights', icon: <Sparkles /> },
   { href: '/recaps', label: 'Weekly Recaps', icon: <CalendarCheck /> },
-  { href: '/feedback', label: 'Share Feedback', icon: <Star /> }, // New Feedback item
+  { href: '/personality-test', label: 'Personality', icon: <TestTube2 /> }, // New Personality Test item
+  { href: '/feedback', label: 'Share Feedback', icon: <Star /> },
   { href: '/settings', label: 'Settings', icon: <Settings /> },
 ];
 

@@ -4,37 +4,35 @@
 /**
  * @fileOverview Implements dynamic AI "Therapist Modes" (Therapist, Coach, Friend) to support users with emotional intelligence.
  * Each mode adapts Mira's tone, guidance, and response behavior to match the user's preferences and emotional needs.
+ * It also considers the user's MBTI type if provided.
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { reframeThoughtTool } from './reframe-thought-flow'; // Assuming this is where the tool is now defined or imported from
+import { reframeThoughtTool } from './reframe-thought-flow';
 
-// Types for chat messages
 const AiChatMessageSchema = z.object({
   sender: z.enum(['user', 'ai']),
   text: z.string(),
 });
 export type AiChatMessage = z.infer<typeof AiChatMessageSchema>;
 
-// Input schema
 const TherapistModeInputSchema = z.object({
   userInput: z.string().describe('The user’s most recent input.'),
   mode: z.enum(['Therapist', 'Coach', 'Friend']).describe('The conversational mode for the AI to adopt.'),
   weeklyRecap: z.string().optional().describe('A reflection of the user’s recent week, to guide response context.'),
   goal: z.string().optional().describe('A personal goal the user is working on.'),
-  messageHistory: z.array(AiChatMessageSchema).optional().describe('Previous conversation context.'),
+  messageHistory: z.array(AiChatMessageSchema).optional().describe('Previous conversation context from the current session.'),
+  mbtiType: z.string().optional().describe("The user's Myers-Briggs personality type, if known (e.g., 'INFJ')."),
 });
 export type TherapistModeInput = z.infer<typeof TherapistModeInputSchema>;
 
-// Output schema
 const TherapistModeOutputSchema = z.object({
   response: z.string().describe('The AI’s conversational reply.'),
   suggestedGoalText: z.string().optional().describe('Optional goal suggested to help user make progress. Should be concise and actionable, starting with a verb (e.g., "Practice deep breathing for 5 minutes", "Write down one positive thing that happened today").'),
 });
 export type TherapistModeOutput = z.infer<typeof TherapistModeOutputSchema>;
 
-// Enhanced instructions per mode
 const therapistInstructions = {
   Therapist: `
 🧠 You are Mira — an emotionally intelligent, AI-powered therapy companion. You are warm, humanlike, and intuitive. Your mission is to support the user through their emotional journey with care, presence, and compassion.
@@ -95,12 +93,13 @@ Use the following dynamic variables to personalize your responses:
   userName: string;                     // Optional, e.g. “Tevin”
   conversationMode: 'Therapist' | 'Coach' | 'Friend';
   messageHistory: string;              // Most recent exchanges (acts like memory)
+  mbtiType?: string;                   // Optional, e.g., 'INFJ', 'ESTP'. If provided, subtly tailor communication. For example, an INFJ might appreciate deeper, more nuanced questions, while an ESTP might prefer more direct, action-oriented suggestions. Avoid stereotyping; use it as a gentle guide.
   userInterests?: string[];            // Optional, e.g. ["journaling", "music"]
   previousGoals?: string[];            // Optional, e.g. ["set boundaries", "be more confident"]
   currentGoal?: string;                // Optional, the user's current active goal if provided.
 }
 
-✅ Adjust your tone, pacing, and follow-up based on the selected mode and recent emotional context.
+✅ Adjust your tone, pacing, and follow-up based on the selected mode, MBTI type (if known), and recent emotional context.
 ✅ If the user seems distressed, slow down. If they seem hopeful, gently guide them forward.
 ✅ If a 'currentGoal' is provided, especially in Coach or Therapist mode, consider checking in on it gently: "How are you feeling about your goal to [goal] lately?" or "Does what you're sharing now connect with your goal around [goal] at all?" Avoid being pushy.
 
@@ -111,11 +110,12 @@ Use the following dynamic variables to personalize your responses:
 You are Mira, a highly encouraging and structured personal growth coach.
 
 Your role is to motivate the user toward meaningful goals while honoring their emotional state.
+If the user's MBTI type (e.g., '{{mbtiType}}') is known, subtly adapt your coaching style. For example, if they are more introverted, provide space for reflection. If more extraverted, perhaps suggest collaborative or outward-facing actions. If they are more feeling-oriented, connect goals to values. If thinking-oriented, focus on logical steps and outcomes.
 
 Thought Process:
 1. Understand the user’s current struggle or goal.
 2. Validate their feelings and clarify what they want to achieve.
-3. Offer motivational nudges and suggest clear, actionable steps.
+3. Offer motivational nudges and suggest clear, actionable steps. These should be concrete and small, like "Try a 5-minute focused breathing exercise when you feel anxious," "Go for a 10-minute walk today to clear your head," or "Write down one small accomplishment by the end of the day."
 4. When suggesting goals, make them small, positive, concrete, and start with a verb (e.g., "Go for a walk for 10 minutes," "Listen to one uplifting song," "Write down one thing you appreciate about yourself today," "Try a 5-minute meditation").
 5. If a current user goal already exists (passed as 'currentGoal'), track progress and encourage momentum. Ask how they are feeling about that goal, or if what they are discussing relates to it.
 6. Propose a new goal suggestion (in the 'suggestedGoalText' output field) only when it aligns naturally with the conversation and feels genuinely helpful.
@@ -134,6 +134,7 @@ Examples of follow-up questions:
 You are Mira, the user's emotionally intelligent and supportive friend.
 
 Your job is to make them feel heard, accepted, and safe to open up.
+If their MBTI type is known (e.g., '{{mbtiType}}'), use it to inform your friendliness. For example, if they are an 'INFP', you might share a relatable personal anecdote (as an AI, of course) or focus on imaginative possibilities. If they are an 'ESTJ', you might be more direct and practical in your friendly support.
 
 Thought Process:
 1. Listen like a close friend would—without judgment.
@@ -153,23 +154,24 @@ Examples of follow-up questions:
 `
 };
 
-// Internal schema passed into prompt
 const TherapistModePromptInternalInputSchema = z.object({
   userInput: z.string(),
   mode: z.enum(['Therapist', 'Coach', 'Friend']),
   weeklyRecap: z.string().optional(),
-  goal: z.string().optional(), // User's current active goal
+  goal: z.string().optional(),
   activeModeInstruction: z.string(),
   messageHistory: z.array(AiChatMessageSchema).optional(),
+  mbtiType: z.string().optional(),
 });
 
-// Enhanced prompt
 const prompt = ai.definePrompt({
   name: 'therapistModePrompt',
   tools: [reframeThoughtTool],
   input: { schema: TherapistModePromptInternalInputSchema },
   output: { schema: TherapistModeOutputSchema },
   system: `You are Mira, an AI therapy companion. Your primary goal is to listen, validate, and support the user. You adapt your interaction style based on the selected mode. Follow the specific instructions for the current mode.
+
+If the user's MBTI type is provided (e.g., '{{mbtiType}}'), use this information to subtly tailor your communication. For example, if they identify as an 'Introvert' (I) type, ensure your responses provide ample space for reflection. If 'Extrovert' (E), you might be slightly more interactive. If 'Feeling' (F), lean into empathetic language. If 'Thinking' (T), a more logical framing might resonate. Do this subtly and without stereotyping.
 
 If the user explicitly asks for help to reframe a specific negative thought (e.g., "Can you help me reframe this thought: ...?" or "How can I think about X differently?"), use the 'reframeThoughtTool' to assist them. Incorporate the tool's output into your response naturally.
 
@@ -179,6 +181,9 @@ Focus on being present and responsive to the user's immediate input and emotiona
 `,
   prompt: `
 ### Current Mode: **{{mode}}**
+{{#if mbtiType}}
+User's MBTI Type: **{{mbtiType}}** (Consider this to personalize your interaction style subtly. For instance, INFJs often appreciate depth, while ESTPs might prefer directness. Use as a gentle guide.)
+{{/if}}
 
 {{{activeModeInstruction}}}
 
@@ -196,7 +201,7 @@ Focus on being present and responsive to the user's immediate input and emotiona
 {{/if}}
 
 {{#if messageHistory.length}}
-📜 **Conversation History (most recent messages):**
+📜 **Conversation History (most recent messages from this session):**
 (You are 'ai', the user is 'user'. Read this to get the emotional and contextual flow.)
 {{#each messageHistory}}
 {{this.sender}}: {{{this.text}}}
@@ -211,9 +216,9 @@ Focus on being present and responsive to the user's immediate input and emotiona
 ---
 
 ### 🎯 Your Task:
-1.  Respond in a way that matches the user's emotional state and preferred mode, following the detailed instructions for **{{mode}}** mode.
+1.  Respond in a way that matches the user's emotional state, preferred mode, and (if known) MBTI type, following the detailed instructions for **{{mode}}** mode.
 2.  Begin by validating the user's emotional experience. Avoid rushing into solutions.
-3.  Use the weekly recap, current user goal (if any), and chat history as emotional and cognitive context.
+3.  Use the weekly recap, current user goal (if any), MBTI type (if any), and chat history as emotional and cognitive context.
 4.  If appropriate for the mode and conversation, provide an **actionable, short, and positive goal suggestion** in the 'suggestedGoalText' field of your output. The goal should start with a verb (e.g., "Write for 10 minutes every morning," "Try naming one emotion when you feel overwhelmed," "Go for a 5-minute walk when stressed"). Do this sparingly and only when it feels natural.
 5.  Your response should sound warm, thoughtful, human, and intelligent.
 6.  Keep the length between 3 to 6 sentences unless brevity is clearly preferred.
@@ -222,7 +227,6 @@ Return your response in the specified JSON format for 'response' and 'suggestedG
 `,
 });
 
-// Flow logic
 const therapistModeFlow = ai.defineFlow(
   {
     name: 'therapistModeFlow',
@@ -239,6 +243,7 @@ const therapistModeFlow = ai.defineFlow(
       goal: flowInput.goal,
       activeModeInstruction: instruction,
       messageHistory: flowInput.messageHistory,
+      mbtiType: flowInput.mbtiType,
     };
 
     const { output } = await prompt(promptPayload);
@@ -246,7 +251,6 @@ const therapistModeFlow = ai.defineFlow(
   }
 );
 
-// Public function
 export async function getTherapistResponse(
   input: TherapistModeInput
 ): Promise<TherapistModeOutput> {

@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth, UserProfile } from '@/contexts/auth-context';
-import { UserCircle, Bell, Palette, ShieldCheck, LogOut, Brain, Zap, Smile, Image as ImageIcon, UserSquare2, Trash2, Loader2 } from 'lucide-react';
+import { UserCircle, Bell, Palette, ShieldCheck, LogOut, Brain, Zap, Smile, Image as ImageIcon, UserSquare2, Trash2, Loader2, TestTube2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -61,6 +61,7 @@ export default function SettingsPage() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true); 
   const [defaultTherapistMode, setDefaultTherapistMode] = useState<TherapistMode>(user?.defaultTherapistMode || 'Therapist');
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState(user?.photoURL || '');
+  const [currentMbtiType, setCurrentMbtiType] = useState(user?.mbtiType || 'Not Set');
   const [isSaving, setIsSaving] = useState(false);
   
   const [darkModeVisual, setDarkModeVisual] = useState(false);
@@ -81,6 +82,7 @@ export default function SettingsPage() {
       setDisplayName(user.displayName || '');
       setDefaultTherapistMode(user.defaultTherapistMode || 'Therapist');
       setSelectedAvatarUrl(user.photoURL || '');
+      setCurrentMbtiType(user.mbtiType || 'Not Set');
     }
   }, [user]);
 
@@ -102,6 +104,7 @@ export default function SettingsPage() {
       if (newPhotoURL !== (user.photoURL || null)) { 
           profileUpdates.photoURL = newPhotoURL;
       }
+      // MBTI type is saved on its own page, so not handled here.
 
 
       if (Object.keys(profileUpdates).length > 0) {
@@ -141,12 +144,10 @@ export default function SettingsPage() {
     if (isEmailProvider) {
       setIsPasswordPromptOpen(true);
     } else {
-      // For Google or other OAuth providers, attempt re-authentication via popup before final delete.
-      // No password input needed for this path initially.
       try {
-        const provider = new GoogleAuthProvider(); // Assuming Google if not email/password
+        const provider = new GoogleAuthProvider(); 
         await reauthenticateWithPopup(auth.currentUser, provider);
-        await handleFinalDelete(); // Proceed to delete data after successful re-auth
+        await handleFinalDelete(); 
       } catch (reauthError: any) {
         console.error("Re-authentication error:", reauthError);
         toast({
@@ -154,7 +155,7 @@ export default function SettingsPage() {
           description: reauthError.message || "Could not re-authenticate. Please try again.",
           variant: "destructive",
         });
-        setIsDeleteConfirmationOpen(false); // Close the initial confirmation
+        setIsDeleteConfirmationOpen(false); 
       }
     }
   };
@@ -170,18 +171,23 @@ export default function SettingsPage() {
     setIsPasswordPromptOpen(false); 
 
     try {
-      // If it's an email provider and password was entered, re-authenticate with credential
       if (auth.currentUser.providerData.some(p => p.providerId === EmailAuthProvider.PROVIDER_ID) && passwordForDelete) {
         const credential = EmailAuthProvider.credential(auth.currentUser.email!, passwordForDelete);
         await reauthenticateWithCredential(auth.currentUser, credential);
       }
-      // For Google users, re-authentication with popup should have happened in handleDeleteDataConfirmed
 
       await deleteUserData(); 
       toast({
         title: "Data Deleted Successfully",
-        description: "All your personal data has been removed. Your account is still active.",
+        description: "All your personal data has been removed. Your profile has been reset.",
       });
+      // Refresh user state to reflect reset profile (e.g., MBTI type removed)
+      if (user) { // Re-fetch user to get the newly initialized profile
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) setUser(userDocSnap.data() as UserProfile);
+      }
+
     } catch (error: any) {
       console.error("Data deletion error:", error);
        let description = error.message || "Could not delete your data.";
@@ -251,7 +257,7 @@ export default function SettingsPage() {
             <CardDescription className="text-xs sm:text-sm">Select an avatar to represent you in the app.</CardDescription>
         </CardHeader>
         <CardContent className="p-4 sm:p-6">
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3 p-2 rounded-lg bg-muted/30">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 sm:gap-3 p-2 rounded-lg bg-muted/30">
             {avatarOptions.map(avatar => (
                 <button
                 key={avatar.id}
@@ -330,6 +336,28 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Card className="shadow-lg rounded-xl sm:rounded-2xl">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl"><TestTube2 className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Personality Type (MBTI)</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">Record your personality type to help Mira understand you better.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 p-4 sm:p-6">
+          <p className="text-sm text-foreground/90">
+            Your current MBTI type: <span className="font-semibold text-primary">{currentMbtiType}</span>
+          </p>
+          <Button variant="outline" asChild className="w-full sm:w-auto justify-center">
+            <Link href="/personality-test">
+              {user?.mbtiType ? 'Change My MBTI Type' : 'Record My MBTI Type'}
+            </Link>
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Knowing your MBTI type is optional but can enhance Mira's understanding. You can take a test online if you don't know yours.
+          </p>
+        </CardContent>
+      </Card>
+
+
        <div className="flex justify-end pt-2">
          <Button onClick={handleSaveChanges} disabled={isSaving || authLoading} className="text-sm sm:text-base">
             {isSaving ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : null}
@@ -359,10 +387,10 @@ export default function SettingsPage() {
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete All Your Data?</AlertDialogTitle>
+                  <AlertDialogTitle>Delete All Your Personal Data?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This action will permanently delete all your personal data, including journals, goals, and recaps.
-                    Your account login will remain, but your app data will be reset. This cannot be undone.
+                    This action will permanently delete all your personal data within ThoughtReflex, including journals, goals, and recaps.
+                    Your login account will remain active, allowing you to start fresh. This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -383,7 +411,6 @@ export default function SettingsPage() {
                 Sign Out
             </Button>
 
-            {/* Password Prompt Dialog */}
             <Dialog open={isPasswordPromptOpen} onOpenChange={setIsPasswordPromptOpen}>
                 <DialogContent>
                     <form onSubmit={handleFinalDelete}>
@@ -420,5 +447,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-
-    
