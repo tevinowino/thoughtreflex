@@ -18,7 +18,8 @@ import {
   CalendarCheck,
   NotebookPen, 
   Star,
-  TestTube2, // Added TestTube2 icon
+  TestTube2,
+  Lightbulb, // Added Lightbulb for Mind Shifts
 } from 'lucide-react';
 
 const navItems = [
@@ -26,9 +27,10 @@ const navItems = [
   { href: '/journal', label: 'Journal (AI Chat)', icon: <BookText /> },
   { href: '/notebook', label: 'Notebook', icon: <NotebookPen /> }, 
   { href: '/goals', label: 'Goals', icon: <Target /> },
+  { href: '/mind-shifts', label: 'Mind Shifts', icon: <Lightbulb /> }, // New Mind Shifts item
   { href: '/insights', label: 'Insights', icon: <Sparkles /> },
   { href: '/recaps', label: 'Weekly Recaps', icon: <CalendarCheck /> },
-  { href: '/personality-test', label: 'Personality', icon: <TestTube2 /> }, // New Personality Test item
+  { href: '/personality-test', label: 'Personality', icon: <TestTube2 /> },
   { href: '/feedback', label: 'Share Feedback', icon: <Star /> },
   { href: '/settings', label: 'Settings', icon: <Settings /> },
 ];

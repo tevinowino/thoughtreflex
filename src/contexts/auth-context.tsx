@@ -29,6 +29,11 @@ export interface UserProfile {
   longestStreak?: number;
   lastJournalDate?: string; // Store as YYYY-MM-DD string
   mbtiType?: string; // e.g., "INFJ", "ESTP"
+  latestMood?: {
+    mood: 'positive' | 'neutral' | 'negative';
+    date: string; // YYYY-MM-DD
+    notes?: string;
+  };
 }
 
 interface AuthContextType {
@@ -58,8 +63,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (userDocSnap.exists()) {
       setUser(userDocSnap.data() as UserProfile);
     } else {
-      // This case should ideally not happen if handleAuthSuccess runs on first login/signup
-      // But as a fallback, create a basic profile.
       const newUserProfile: UserProfile = {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
@@ -69,7 +72,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         currentStreak: 0,
         longestStreak: 0,
         lastJournalDate: '',
-        mbtiType: undefined, // Initialize mbtiType
+        mbtiType: undefined,
+        latestMood: undefined,
       };
       await setDoc(userDocRef, newUserProfile, { merge: true });
       setUser(newUserProfile);
@@ -104,7 +108,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     if (userDocSnap.exists()) {
       userProfileData = userDocSnap.data() as UserProfile;
-      // Ensure all fields are present, especially new ones like mbtiType
       userProfileData = {
         ...userProfileData,
         uid: firebaseUser.uid,
@@ -116,6 +119,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         lastJournalDate: userProfileData.lastJournalDate || '',
         defaultTherapistMode: userProfileData.defaultTherapistMode || 'Therapist',
         mbtiType: userProfileData.mbtiType || undefined,
+        latestMood: userProfileData.latestMood || undefined,
       };
     } else {
       userProfileData = {
@@ -128,6 +132,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         longestStreak: 0,
         lastJournalDate: '',
         mbtiType: undefined,
+        latestMood: undefined,
       };
     }
     
@@ -218,10 +223,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       await updateDoc(userDocRef, details);
-      const updatedDocSnap = await getDoc(userDocRef);
-      if (updatedDocSnap.exists()) {
-        setUser(updatedDocSnap.data() as UserProfile);
-      }
+      // Optimistically update local state, or re-fetch
+      setUser(prevUser => prevUser ? { ...prevUser, ...details } : null);
       setError(null);
     } catch (err) {
       handleAuthError(err as AuthError);
@@ -254,7 +257,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       const batch = writeBatch(db);
-      const collectionsToDelete = ['goals', 'journalSessions', 'notebookEntries', 'weeklyRecaps'];
+      const collectionsToDelete = ['goals', 'journalSessions', 'notebookEntries', 'weeklyRecaps', 'mindShifts', 'dailyMoods'];
 
       for (const collName of collectionsToDelete) {
         const collRef = collection(db, 'users', user.uid, collName);
@@ -270,7 +273,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       
       const userDocRef = doc(db, 'users', user.uid);
-      // Instead of deleting, we re-initialize
       const freshUserProfile: UserProfile = {
         uid: currentUser.uid,
         email: currentUser.email,
@@ -280,9 +282,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         currentStreak: 0,
         longestStreak: 0,
         lastJournalDate: '',
-        mbtiType: undefined, // Reset MBTI type
+        mbtiType: undefined,
+        latestMood: undefined,
       };
-      batch.set(userDocRef, freshUserProfile); // Set replaces the document
+      batch.set(userDocRef, freshUserProfile); 
 
       await batch.commit(); 
       setUser(freshUserProfile);

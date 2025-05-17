@@ -2,13 +2,13 @@
 'use client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { useAuth } from '@/contexts/auth-context';
-import { BookText, Target, Sparkles, CalendarCheck, Edit3, Loader2, Flame, ArrowRight } from 'lucide-react';
+import { useAuth, UserProfile } from '@/contexts/auth-context';
+import { BookText, Target, Sparkles, CalendarCheck, Edit3, Loader2, Flame, ArrowRight, Smile, Meh, Frown, Save } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, query, orderBy, limit, onSnapshot, where, Timestamp } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, where, Timestamp, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import type { WeeklyRecap } from '../recaps/page'; 
 
@@ -24,9 +24,10 @@ interface GoalSummary {
   isCompleted: boolean;
 }
 
+type MoodOption = 'positive' | 'neutral' | 'negative';
 
 export default function DashboardPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, updateUserProfile, refreshUserProfile } = useAuth();
   const { toast } = useToast();
   const [recentJournals, setRecentJournals] = useState<RecentJournal[]>([]);
   const [activeGoals, setActiveGoals] = useState<GoalSummary[]>([]);
@@ -36,13 +37,39 @@ export default function DashboardPage() {
   const [isRecapAvailable, setIsRecapAvailable] = useState(false); 
   const [currentStreak, setCurrentStreak] = useState(0);
   const [longestStreak, setLongestStreak] = useState(0);
+  const [currentDayMood, setCurrentDayMood] = useState<MoodOption | null>(null);
+  const [loadingMood, setLoadingMood] = useState(true);
 
+  const getTodayDateString = () => new Date().toISOString().split('T')[0];
 
   useEffect(() => {
     if (!user || authLoading) return;
 
     setCurrentStreak(user.currentStreak || 0);
     setLongestStreak(user.longestStreak || 0);
+
+    // Fetch Today's Mood
+    setLoadingMood(true);
+    const todayDateStr = getTodayDateString();
+    if (user.latestMood && user.latestMood.date === todayDateStr) {
+      setCurrentDayMood(user.latestMood.mood);
+      setLoadingMood(false);
+    } else {
+      // Check dailyMoods collection if latestMood is outdated or not present
+      const moodDocRef = doc(db, 'users', user.uid, 'dailyMoods', todayDateStr);
+      getDoc(moodDocRef).then(docSnap => {
+        if (docSnap.exists()) {
+          setCurrentDayMood(docSnap.data().mood as MoodOption);
+        } else {
+          setCurrentDayMood(null);
+        }
+        setLoadingMood(false);
+      }).catch(err => {
+        console.error("Error fetching today's mood:", err);
+        setLoadingMood(false);
+      });
+    }
+    
 
     setLoadingJournals(true);
     const journalsQuery = query(
@@ -123,6 +150,33 @@ export default function DashboardPage() {
     };
   }, [user, authLoading, toast]);
 
+  const handleLogMood = async (mood: MoodOption) => {
+    if (!user) return;
+    const todayDateStr = getTodayDateString();
+    const moodData = {
+      mood: mood,
+      date: todayDateStr,
+      timestamp: serverTimestamp(),
+    };
+
+    try {
+      const dailyMoodDocRef = doc(db, 'users', user.uid, 'dailyMoods', todayDateStr);
+      await setDoc(dailyMoodDocRef, { mood: mood, timestamp: serverTimestamp() });
+      await updateUserProfile({ latestMood: { mood, date: todayDateStr } }); // Update main profile too
+      setCurrentDayMood(mood);
+      toast({ title: "Mood Logged!", description: `Your mood for today has been logged as ${mood}.` });
+      if (refreshUserProfile) await refreshUserProfile(); // Ensure latestMood is reflected in context
+    } catch (error) {
+      console.error("Error logging mood:", error);
+      toast({ title: "Error", description: "Could not log your mood.", variant: "destructive" });
+    }
+  };
+
+  const moodConfig = {
+    positive: { color: 'bg-green-500', darkColor: 'dark:bg-green-400', text: 'Feeling Positive!', icon: <Smile className="h-5 w-5 text-white" /> },
+    neutral: { color: 'bg-yellow-500', darkColor: 'dark:bg-yellow-400', text: 'Feeling Neutral.', icon: <Meh className="h-5 w-5 text-white" /> },
+    negative: { color: 'bg-red-500', darkColor: 'dark:bg-red-400', text: 'Feeling a Bit Down.', icon: <Frown className="h-5 w-5 text-white" /> },
+  };
 
   if (authLoading || !user) {
     return (
@@ -155,7 +209,7 @@ export default function DashboardPage() {
     <div className="space-y-8 sm:space-y-10 md:space-y-12 p-4 md:p-6 lg:p-8 bg-gradient-to-br from-background to-background/95">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6 backdrop-blur-sm p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-primary/10">
         <div className="transform transition-all duration-500 hover:scale-[1.02]">
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-primary to-primary/80 tracking-tight">{user?.displayName?.split(' ')[0] || 'User'}!</h1>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-primary to-primary/80 tracking-tight">Welcome, {user?.displayName?.split(' ')[0] || 'User'}!</h1>
           <p className="text-lg sm:text-xl text-muted-foreground/90 mt-2 sm:mt-3 font-medium leading-relaxed">
             Ready to reflect and grow? Here's your personalized space.
           </p>
@@ -168,6 +222,35 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:gap-6 md:gap-8 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {/* Log Your Mood Card */}
+        <DashboardCard className="backdrop-blur-md bg-card/95 hover:translate-y-[-6px] sm:hover:translate-y-[-8px]">
+          <DashboardCardHeader title="Log Your Mood" description="How are you feeling today?" icon={<Smile className="h-6 w-6 sm:h-7 sm:w-7" />} />
+          <CardContent className="flex-grow px-4 sm:px-6 pb-4 sm:pb-6 pt-0 space-y-3">
+            <div className="flex justify-around gap-2">
+              <Button onClick={() => handleLogMood('positive')} variant={currentDayMood === 'positive' ? "default" : "outline"} className="flex-1 h-12 bg-green-500/20 hover:bg-green-500/30 border-green-500/50 text-green-700 dark:text-green-300 dark:hover:bg-green-500/40">
+                <Smile className="h-5 w-5 mr-2" /> Good
+              </Button>
+              <Button onClick={() => handleLogMood('neutral')} variant={currentDayMood === 'neutral' ? "default" : "outline"} className="flex-1 h-12 bg-yellow-500/20 hover:bg-yellow-500/30 border-yellow-500/50 text-yellow-700 dark:text-yellow-400 dark:hover:bg-yellow-500/40">
+                <Meh className="h-5 w-5 mr-2" /> Neutral
+              </Button>
+              <Button onClick={() => handleLogMood('negative')} variant={currentDayMood === 'negative' ? "default" : "outline"} className="flex-1 h-12 bg-red-500/20 hover:bg-red-500/30 border-red-500/50 text-red-700 dark:text-red-400 dark:hover:bg-red-500/40">
+                <Frown className="h-5 w-5 mr-2" /> Bad
+              </Button>
+            </div>
+          </CardContent>
+           <CardFooter className="p-4 sm:p-5 mt-auto border-t border-primary/10">
+             {loadingMood ? (
+                <div className="flex items-center justify-center w-full"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
+             ) : currentDayMood ? (
+                <div className={`w-full text-center p-2 rounded-md text-sm font-medium text-white ${moodConfig[currentDayMood].color} ${moodConfig[currentDayMood].darkColor}`}>
+                  {moodConfig[currentDayMood].icon} {moodConfig[currentDayMood].text}
+                </div>
+              ) : (
+                <p className="text-xs sm:text-sm text-muted-foreground/90 text-center w-full font-medium">Log your mood to see it reflected here.</p>
+              )}
+          </CardFooter>
+        </DashboardCard>
+
         <DashboardCard className="backdrop-blur-md bg-card/95 hover:translate-y-[-6px] sm:hover:translate-y-[-8px]">
           <DashboardCardHeader title="Recent Journals" description="Continue your journey of self-reflection." icon={<BookText className="h-6 w-6 sm:h-7 sm:w-7 animate-pulse"/>} />
           <CardContent className="flex-grow px-4 sm:px-6 pb-4 sm:pb-6 pt-0">
@@ -288,5 +371,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
