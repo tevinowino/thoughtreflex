@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -15,11 +16,13 @@ import {
   Sparkles,
   Settings,
   CalendarCheck,
+  NotebookPen, // Added NotebookPen icon
 } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard /> },
-  { href: '/journal', label: 'Journal', icon: <BookText /> },
+  { href: '/journal', label: 'Journal (AI Chat)', icon: <BookText /> },
+  { href: '/notebook', label: 'Notebook', icon: <NotebookPen /> }, // New Notebook item
   { href: '/goals', label: 'Goals', icon: <Target /> },
   { href: '/insights', label: 'Insights', icon: <Sparkles /> },
   { href: '/recaps', label: 'Weekly Recaps', icon: <CalendarCheck /> },
