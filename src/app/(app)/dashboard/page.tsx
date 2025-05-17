@@ -79,6 +79,13 @@ export default function DashboardPage() {
       }));
       setActiveGoals(fetchedGoals);
       setLoadingGoals(false);
+      if (fetchedGoals.length > 0 && !sessionStorage.getItem('goalReminderShown')) {
+        toast({ 
+          title: "Goal Reminder ✨", 
+          description: "Don't forget to check in on your active goals today! You're making great progress." 
+        });
+        sessionStorage.setItem('goalReminderShown', 'true');
+      }
     }, (error) => {
       console.error("Error fetching active goals:", error);
       toast({ title: "Error", description: "Could not load active goals.", variant: "destructive" });
@@ -92,8 +99,16 @@ export default function DashboardPage() {
       limit(1)
     );
     const unsubscribeRecaps = onSnapshot(recapsQuery, (snapshot) => {
-      setIsRecapAvailable(!snapshot.empty);
+      const recapExists = !snapshot.empty;
+      setIsRecapAvailable(recapExists);
       setLoadingRecap(false);
+      if (recapExists && !sessionStorage.getItem('recapReminderShown')) {
+        toast({ 
+          title: "Weekly Recap Ready! 🗓️", 
+          description: "Your latest weekly insights await! Take a moment to reflect." 
+        });
+        sessionStorage.setItem('recapReminderShown', 'true');
+      }
     }, (error) => {
       console.error("Error fetching weekly recaps:", error);
       setIsRecapAvailable(false);
@@ -261,7 +276,7 @@ export default function DashboardPage() {
           </div>
            <div className="flex-shrink-0 w-full md:w-2/5 lg:w-1/3 transform transition-all duration-500 hover:scale-105">
             <Image 
-              src="/insights.png" 
+              src="/images/dashboard/insights-promo.png" 
               alt="Abstract representation of personal insights" 
               width={600} 
               height={600} 
