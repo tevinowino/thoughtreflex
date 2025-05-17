@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft } from 'lucide-react';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth, UserProfile } from '@/contexts/auth-context'; // Import UserProfile
 import { CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -30,13 +30,17 @@ interface Message {
 
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
 
-// Simplified message structure for AI flow context
 interface AiChatMessage {
   sender: 'user' | 'ai';
   text: string;
 }
 
-const MAX_HISTORY_MESSAGES = 10; // Number of recent messages to send to AI for context
+const MAX_HISTORY_MESSAGES = 10; 
+
+// Helper to get date string in YYYY-MM-DD format
+const getISODateString = (date: Date): string => {
+  return date.toISOString().split('T')[0];
+};
 
 export default function JournalSessionPage() {
   const params = useParams();
@@ -44,7 +48,7 @@ export default function JournalSessionPage() {
   const { toast } = useToast();
   const initialSessionId = params.sessionId as string;
 
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, refreshUserProfile } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sessionTitle, setSessionTitle] = useState('Loading session...');
@@ -115,6 +119,64 @@ export default function JournalSessionPage() {
     }
   }, [messages]);
 
+  const handleStreakUpdate = async () => {
+    if (!user) return;
+
+    try {
+      const userDocRef = doc(db, 'users', user.uid);
+      // It's important to get the LATEST user profile data from Firestore for streak calculation
+      const userDocSnap = await getDoc(userDocRef);
+      if (!userDocSnap.exists()) {
+        console.error("User profile not found for streak update.");
+        return;
+      }
+      const userProfile = userDocSnap.data() as UserProfile;
+
+      const today = new Date();
+      const todayDateString = getISODateString(today);
+      const lastJournalDateString = userProfile.lastJournalDate || "";
+
+
+      if (lastJournalDateString !== todayDateString) {
+        let newCurrentStreak = userProfile.currentStreak || 0;
+        let newLongestStreak = userProfile.longestStreak || 0;
+
+        if (lastJournalDateString) {
+          const yesterday = new Date(today);
+          yesterday.setDate(today.getDate() - 1);
+          const yesterdayDateString = getISODateString(yesterday);
+
+          if (lastJournalDateString === yesterdayDateString) {
+            newCurrentStreak += 1;
+          } else {
+            newCurrentStreak = 1; // Streak broken or first journal in a while
+          }
+        } else {
+          newCurrentStreak = 1; // First journal entry ever
+        }
+
+        if (newCurrentStreak > newLongestStreak) {
+          newLongestStreak = newCurrentStreak;
+        }
+
+        const streakUpdates: Partial<UserProfile> = {
+          currentStreak: newCurrentStreak,
+          longestStreak: newLongestStreak,
+          lastJournalDate: todayDateString, 
+        };
+        await updateDoc(userDocRef, streakUpdates);
+        if (refreshUserProfile) { // Refresh user profile in AuthContext
+          await refreshUserProfile();
+        }
+        toast({ title: "Streak Updated!", description: `You're on a ${newCurrentStreak}-day streak!`, });
+      }
+    } catch (error) {
+      console.error("Error updating streak:", error);
+      toast({ title: "Streak Error", description: "Could not update your journaling streak.", variant: "destructive"});
+    }
+  };
+
+
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !user) return;
@@ -122,7 +184,7 @@ export default function JournalSessionPage() {
     const userMessageText = input;
     setInput(''); 
 
-    const userMessageData: Omit<Message, 'id' | 'timestamp'> & { timestamp: any } = { // Use 'any' for serverTimestamp initially
+    const userMessageData: Omit<Message, 'id' | 'timestamp'> & { timestamp: any } = { 
       text: userMessageText,
       sender: 'user',
       timestamp: serverTimestamp(),
@@ -132,12 +194,12 @@ export default function JournalSessionPage() {
 
     setIsLoadingAiResponse(true);
     let tempUserMessageId = Date.now().toString();
-    // Add optimistic UI update with a client-side Date object
     setMessages(prev => [...prev, { ...userMessageData, id: tempUserMessageId, timestamp: new Date() } as Message]);
 
 
     try {
       let actualSessionId = currentDbSessionId;
+      let isFirstMessageToday = false; // Flag to check if this is the first message of the day for streak
 
       if (!actualSessionId) {
         const sessionColRef = collection(db, 'users', user.uid, 'journalSessions');
@@ -152,10 +214,28 @@ export default function JournalSessionPage() {
         setCurrentDbSessionId(actualSessionId);
         router.replace(`/journal/${actualSessionId}`, { scroll: false });
         setSessionTitle(`Journal - ${new Date().toLocaleDateString()}`);
+        isFirstMessageToday = true; // New session implies first message of the day for this session context
+      } else {
+        // For existing sessions, we check if this is the first message of *today* to update streak.
+        // This simple check might not be perfect if user jumps between old sessions.
+        // A more robust way is to check the user's lastJournalDate directly.
+        const sessionDocRef = doc(db, 'users', user.uid, 'journalSessions', actualSessionId);
+        const sessionSnap = await getDoc(sessionDocRef);
+        if (sessionSnap.exists()) {
+            const lastUpdated = (sessionSnap.data().lastUpdatedAt as Timestamp).toDate();
+            if (getISODateString(lastUpdated) !== getISODateString(new Date())) {
+                isFirstMessageToday = true;
+            }
+        }
       }
+
 
       const userMsgRef = await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), userMessageData);
       setMessages(prev => prev.map(m => m.id === tempUserMessageId ? {...m, id: userMsgRef.id} : m));
+      
+      // Call streak update logic. It will internally check if an update is needed for today.
+      await handleStreakUpdate();
+
 
       let activeGoalText: string | undefined = undefined;
       if (currentTherapistMode === 'Coach') {
@@ -166,11 +246,9 @@ export default function JournalSessionPage() {
           }
       }
       
-      // Prepare message history for AI
       const historyForAI: AiChatMessage[] = messages
-        .slice(-MAX_HISTORY_MESSAGES) // Get last N messages
+        .slice(-MAX_HISTORY_MESSAGES) 
         .map(msg => ({ sender: msg.sender, text: msg.text }));
-      // Add the current user message to the history being sent to AI
       historyForAI.push({ sender: 'user', text: userMessageText });
 
 
@@ -290,6 +368,7 @@ export default function JournalSessionPage() {
         {isLoadingAiResponse && (
           <div className="flex items-end gap-2.5 mr-auto mb-5">
             <Avatar className="h-9 w-9 self-start">
+                <AvatarImage src="/logo-ai.png" alt="Mira AI" data-ai-hint="ai bot" />
               <AvatarFallback><Brain className="h-4 w-4" /></AvatarFallback>
             </Avatar>
             <div className="px-4 py-3 rounded-2xl shadow-md bg-muted text-foreground rounded-bl-none">
@@ -333,5 +412,3 @@ export default function JournalSessionPage() {
     </div>
   );
 }
-
-    

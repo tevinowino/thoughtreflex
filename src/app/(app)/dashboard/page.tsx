@@ -3,14 +3,14 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/auth-context';
-import { BookText, Target, Sparkles, CalendarCheck, Edit3, Loader2 } from 'lucide-react';
+import { BookText, Target, Sparkles, CalendarCheck, Edit3, Loader2, Flame } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, query, orderBy, limit, onSnapshot, where, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import type { WeeklyRecap } from '../recaps/page'; // For recap type
+import type { WeeklyRecap } from '../recaps/page'; 
 
 interface RecentJournal {
   id: string;
@@ -26,7 +26,7 @@ interface GoalSummary {
 
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [recentJournals, setRecentJournals] = useState<RecentJournal[]>([]);
   const [activeGoals, setActiveGoals] = useState<GoalSummary[]>([]);
@@ -34,10 +34,15 @@ export default function DashboardPage() {
   const [loadingGoals, setLoadingGoals] = useState(true);
   const [loadingRecap, setLoadingRecap] = useState(true);
   const [isRecapAvailable, setIsRecapAvailable] = useState(false); 
+  const [currentStreak, setCurrentStreak] = useState(0);
+  const [longestStreak, setLongestStreak] = useState(0);
 
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || authLoading) return;
+
+    setCurrentStreak(user.currentStreak || 0);
+    setLongestStreak(user.longestStreak || 0);
 
     // Fetch Recent Journals
     setLoadingJournals(true);
@@ -82,7 +87,6 @@ export default function DashboardPage() {
       setLoadingGoals(false);
     });
     
-    // Fetch Latest Weekly Recap
     setLoadingRecap(true);
     const recapsQuery = query(
       collection(db, 'users', user.uid, 'weeklyRecaps'),
@@ -91,8 +95,6 @@ export default function DashboardPage() {
     );
     const unsubscribeRecaps = onSnapshot(recapsQuery, (snapshot) => {
       if (!snapshot.empty) {
-        // Potentially check if the recap is from the "current" or "last" week
-        // For now, just check if any recap exists
         setIsRecapAvailable(true);
       } else {
         setIsRecapAvailable(false);
@@ -100,7 +102,6 @@ export default function DashboardPage() {
       setLoadingRecap(false);
     }, (error) => {
       console.error("Error fetching weekly recaps:", error);
-      // Don't toast for this, as it's less critical for dashboard display
       setIsRecapAvailable(false);
       setLoadingRecap(false);
     });
@@ -111,8 +112,16 @@ export default function DashboardPage() {
       unsubscribeGoals();
       unsubscribeRecaps();
     };
-  }, [user, toast]);
+  }, [user, authLoading, toast]);
 
+
+  if (authLoading || !user) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -130,7 +139,7 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <Card className="shadow-lg hover:shadow-xl transition-shadow rounded-2xl">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -195,6 +204,22 @@ export default function DashboardPage() {
             </Button>
           </CardContent>
         </Card>
+        
+        <Card className="shadow-lg hover:shadow-xl transition-shadow rounded-2xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Flame className="h-6 w-6 text-primary" />
+              Journaling Streak
+            </CardTitle>
+            <CardDescription>Keep your reflection momentum going!</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-lg text-foreground">Current Streak: <span className="font-bold">{currentStreak} {currentStreak === 1 ? 'day' : 'days'}</span></p>
+            <p className="text-sm text-muted-foreground">Longest Streak: {longestStreak} {longestStreak === 1 ? 'day' : 'days'}</p>
+            {currentStreak === 0 && <p className="text-sm text-muted-foreground">Start journaling today to build your streak!</p>}
+             {currentStreak > 0 && <p className="text-sm text-primary">Great job! Keep it up!</p>}
+          </CardContent>
+        </Card>
 
         <Card className="shadow-lg hover:shadow-xl transition-shadow rounded-2xl">
           <CardHeader>
@@ -254,5 +279,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
