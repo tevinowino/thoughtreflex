@@ -3,10 +3,10 @@
 
 import { useState, useEffect, useRef, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Button, buttonVariants } from '@/components/ui/button'; // Added buttonVariants import
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2 } from 'lucide-react';
+import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle } from 'lucide-react';
 import { useAuth, UserProfile } from '@/contexts/auth-context'; 
 import { CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -29,6 +29,8 @@ interface Message {
   timestamp: Timestamp | Date; 
   avatar?: string | null;
   name: string;
+  suggestedGoalText?: string;
+  isGoalAdded?: boolean;
 }
 
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
@@ -251,18 +253,20 @@ export default function JournalSessionPage() {
         timestamp: serverTimestamp(),
         name: 'Mira',
         avatar: '/logo-ai.png',
+        suggestedGoalText: aiResponse.suggestedGoalText,
+        isGoalAdded: false,
       };
       await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), aiMessageData);
 
       await updateDoc(doc(db, 'users', user.uid, 'journalSessions', actualSessionId!), {
         lastUpdatedAt: serverTimestamp(),
-        ...(messages.length === 0 && { firstMessagePreview: userMessageText.substring(0, 100) }) // Update preview only if it's the first user message
+        ...(messages.length === 0 && { firstMessagePreview: userMessageText.substring(0, 100) }) 
       });
 
     } catch (error: any) {
       console.error("Error sending message or getting AI response:", error);
       toast({ title: "Error", description: error.message || "Could not process message.", variant: "destructive" });
-      setInput(userMessageText); // Restore input if sending failed
+      setInput(userMessageText); 
       setMessages(prev => prev.filter(m => m.id !== tempUserMessageId)); 
     } finally {
       setIsLoadingAiResponse(false);
@@ -296,7 +300,6 @@ export default function JournalSessionPage() {
       const sessionDocRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId);
       const messagesColRef = collection(db, 'users', user.uid, 'journalSessions', currentDbSessionId, 'messages');
       
-      // Delete all messages in subcollection
       const messagesSnapshot = await getDocs(messagesColRef);
       const batch = writeBatch(db);
       messagesSnapshot.forEach(doc => {
@@ -304,7 +307,6 @@ export default function JournalSessionPage() {
       });
       await batch.commit();
 
-      // Delete session document
       await deleteDoc(sessionDocRef);
 
       toast({ title: "Session Deleted", description: "The session and its messages have been removed." });
@@ -315,6 +317,32 @@ export default function JournalSessionPage() {
     } finally {
       setIsDeletingSession(false);
       setIsSessionSettingsOpen(false);
+    }
+  };
+
+  const handleAddSuggestedGoal = async (messageId: string, goalText: string) => {
+    if (!user || !currentDbSessionId) return;
+    try {
+      await addDoc(collection(db, 'users', user.uid, 'goals'), {
+        text: goalText,
+        isCompleted: false,
+        createdAt: serverTimestamp(),
+        userId: user.uid,
+      });
+      toast({ title: "Goal Added!", description: `"${goalText}" has been added to your goals.` });
+
+      const messageRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId, 'messages', messageId);
+      await updateDoc(messageRef, { isGoalAdded: true });
+      
+      setMessages(prevMessages =>
+        prevMessages.map(m =>
+          m.id === messageId ? { ...m, isGoalAdded: true } : m
+        )
+      );
+
+    } catch (error) {
+      console.error("Error adding suggested goal:", error);
+      toast({ title: "Error", description: "Could not add suggested goal.", variant: "destructive" });
     }
   };
 
@@ -384,7 +412,7 @@ export default function JournalSessionPage() {
               <DialogFooter className="justify-between sm:justify-between">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive" outline disabled={isDeletingSession}>
+                    <Button variant="destructive" disabled={isDeletingSession}>
                       {isDeletingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                       Delete Session
                     </Button>
@@ -438,6 +466,27 @@ export default function JournalSessionPage() {
               )}
             >
               <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+               {msg.sender === 'ai' && msg.suggestedGoalText && !msg.isGoalAdded && (
+                <div className="mt-3 pt-3 border-t border-foreground/20">
+                  <p className="text-xs font-semibold text-foreground/80 mb-1">Mira's Goal Suggestion:</p>
+                  <p className="text-sm text-foreground/90 italic">"{msg.suggestedGoalText}"</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-2 text-xs h-auto py-1 px-2 bg-background hover:bg-accent"
+                    onClick={() => handleAddSuggestedGoal(msg.id, msg.suggestedGoalText!)}
+                  >
+                    <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Add this goal
+                  </Button>
+                </div>
+              )}
+              {msg.sender === 'ai' && msg.suggestedGoalText && msg.isGoalAdded && (
+                  <div className="mt-3 pt-3 border-t border-green-500/30">
+                      <p className="text-sm text-green-600 dark:text-green-400 flex items-center">
+                        <CheckCircle className="mr-1.5 h-4 w-4" /> Goal added to your list!
+                      </p>
+                  </div>
+              )}
               <p className={cn(
                   "text-xs mt-1.5 opacity-60 group-hover:opacity-100 transition-opacity duration-200", 
                   msg.sender === 'user' ? 'text-primary-foreground/80 text-right' : 'text-muted-foreground/80 text-left'

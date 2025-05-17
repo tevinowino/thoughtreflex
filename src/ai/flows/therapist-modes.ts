@@ -32,13 +32,14 @@ export type TherapistModeInput = z.infer<typeof TherapistModeInputSchema>;
 
 const TherapistModeOutputSchema = z.object({
   response: z.string().describe('The AI therapist response.'),
+  suggestedGoalText: z.string().optional().describe('A concrete, actionable goal suggested to the user based on their entry, if appropriate. The goal should be concise and start with a verb.'),
 });
 export type TherapistModeOutput = z.infer<typeof TherapistModeOutputSchema>;
 
 // Define mode-specific instructions
 const therapistInstructions = {
   Therapist: `You are in Therapist mode. Be reflective, deep, and slow in your responses. Ask emotionally intelligent follow-up questions. Identify recurring themes and give soft nudges.`,
-  Coach: `You are in Coach mode. Be motivational and structured in your responses. Check in on the user's goals and encourage progress.`,
+  Coach: `You are in Coach mode. Be motivational and structured in your responses. Check in on the user's goals and encourage progress. If you identify an opportunity for personal growth or a problem the user is facing that could be addressed with a goal, you are more likely to suggest one.`,
   Friend: `You are in Friend mode. Be casual, warm, and conversational in your responses. Inject light questions to keep the mood balanced and welcoming.`,
 };
 
@@ -81,6 +82,8 @@ Also, consider this weekly recap: {{{weeklyRecap}}}
 
 Now, respond to the latest user input:
 User: {{{userInput}}}
+
+Based on the user's input and the conversation history, if you identify an opportunity for personal growth or a problem the user is facing, suggest one clear, concise, and actionable goal they could work on. The goal should start with a verb (e.g., "Practice deep breathing for 5 minutes daily", "Identify one small step towards improving X"). Only suggest a goal if it feels natural and supportive within the context of the conversation and the current therapy mode (especially if in Coach mode). If suggesting a goal, provide it in the 'suggestedGoalText' field. Otherwise, omit 'suggestedGoalText' or leave it empty.
 `,
 });
 
