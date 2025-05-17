@@ -1,4 +1,6 @@
 // src/components/landing/features-section.tsx
+'use client';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BrainCircuit, MessageSquare, ShieldCheck, CalendarCheck, Target, TrendingUp } from 'lucide-react'; // Updated icons
 import { motion } from 'framer-motion';

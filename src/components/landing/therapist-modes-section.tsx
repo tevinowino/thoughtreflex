@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Brain, Zap, Smile, MessageCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import React from 'react';
 
 interface Mode {
   name: 'Therapist' | 'Coach' | 'Friend';

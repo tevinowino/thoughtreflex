@@ -1,4 +1,6 @@
 // src/components/landing/how-it-works-section.tsx
+'use client'
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PencilLine, MessagesSquare, Repeat, Award, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
