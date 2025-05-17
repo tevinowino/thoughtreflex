@@ -224,7 +224,7 @@ export default function NotebookPage() {
           </div>
           <div className="md:w-1/3 flex-shrink-0">
              <Image 
-              src="/images/notebook/notebook-writing-visual.png"
+              src="/notebook.png"
               alt="Person writing in a physical notebook, symbolizing private reflection"
               width={400}
               height={300}

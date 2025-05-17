@@ -274,7 +274,7 @@ export default function RecapsPage() {
           </div>
           <div className="md:w-1/3 flex-shrink-0">
              <Image 
-              src="/images/recaps/scenic-reflection-visual.png"
+              src="/weeklyreflecting.png"
               alt="Person looking at a scenic view thoughtfully, representing weekly reflection"
               width={400}
               height={350}

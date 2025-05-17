@@ -256,7 +256,7 @@ export default function GoalsPage() {
           </div>
           <div className="md:w-1/3 flex-shrink-0">
              <Image 
-              src="/images/goals/goal-inspiration.png"
+              src="/goal.png"
               alt="Person looking at a mountain peak, symbolizing goal achievement"
               width={400}
               height={350}

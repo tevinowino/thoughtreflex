@@ -41,10 +41,11 @@ import { EmailAuthProvider } from 'firebase/auth';
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
 
 const avatarOptions = [
-  { id: 'avatar1', name: 'Character 1', url: '/avatars/avatar1.png' },
-  { id: 'avatar2', name: 'Character 2', url: '/avatars/avatar2.png' },
-  { id: 'avatar3', name: 'Character 3', url: '/avatars/avatar3.png' },
-  { id: 'avatar4', name: 'Character 4', url: '/avatars/avatar4.png' },
+  { id: 'avatar1', name: 'Character 1', url: '/avatars/blue.png' },
+  { id: 'avatar2', name: 'Character 2', url: '/avatars/explorer.png' },
+  { id: 'avatar3', name: 'Character 3', url: '/avatars/lily.png' },
+  { id: 'avatar4', name: 'Character 4', url: '/avatars/rex.png' },
+  { id: 'avatar5', name: 'Character 5', url: '/avatars/violet.png' },
   { id: 'no_avatar', name: 'No Avatar', url: ''}
 ];
 

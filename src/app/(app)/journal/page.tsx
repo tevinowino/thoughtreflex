@@ -143,7 +143,7 @@ export default function JournalPage() {
           </div>
           <div className="md:w-1/3 flex-shrink-0">
              <Image 
-              src="/images/journal/journal-writing-visual.png"
+              src="/journaling.png"
               alt="Person journaling peacefully, symbolizing self-reflection"
               width={400}
               height={300}
