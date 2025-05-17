@@ -23,12 +23,20 @@ interface Message {
   id: string;
   text: string;
   sender: 'user' | 'ai';
-  timestamp: Timestamp | Date; // Store as Timestamp, use as Date
+  timestamp: Timestamp | Date; 
   avatar?: string | null;
   name: string;
 }
 
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
+
+// Simplified message structure for AI flow context
+interface AiChatMessage {
+  sender: 'user' | 'ai';
+  text: string;
+}
+
+const MAX_HISTORY_MESSAGES = 10; // Number of recent messages to send to AI for context
 
 export default function JournalSessionPage() {
   const params = useParams();
@@ -62,7 +70,7 @@ export default function JournalSessionPage() {
         { id: '0', text: "Welcome! I'm here to listen. What's on your mind today?", sender: 'ai', timestamp: new Date(), name: 'ThoughtReflex AI', avatar: '/logo-ai.png' },
       ]);
       setIsLoadingSession(false);
-      setCurrentDbSessionId(null); // Explicitly set to null for new sessions
+      setCurrentDbSessionId(null); 
     } else {
       setIsLoadingSession(true);
       setCurrentDbSessionId(initialSessionId);
@@ -84,7 +92,7 @@ export default function JournalSessionPage() {
       const q = query(messagesColRef, orderBy('timestamp', 'asc'));
 
       const unsubscribe = onSnapshot(q, (snapshot) => {
-        const fetchedMessages = snapshot.docs.map(docSnap => ({ // Renamed doc to docSnap to avoid conflict
+        const fetchedMessages = snapshot.docs.map(docSnap => ({ 
           id: docSnap.id,
           ...docSnap.data(),
           timestamp: docSnap.data().timestamp?.toDate ? docSnap.data().timestamp.toDate() : new Date(),
@@ -112,25 +120,25 @@ export default function JournalSessionPage() {
     if (!input.trim() || !user) return;
 
     const userMessageText = input;
-    setInput(''); // Clear input immediately
+    setInput(''); 
 
-    const userMessageData: Omit<Message, 'id'> = {
+    const userMessageData: Omit<Message, 'id' | 'timestamp'> & { timestamp: any } = { // Use 'any' for serverTimestamp initially
       text: userMessageText,
       sender: 'user',
-      timestamp: serverTimestamp() as unknown as Timestamp, // Firestore will convert this
+      timestamp: serverTimestamp(),
       name: user.displayName || 'User',
-      avatar: user.photoURL || null,
+      avatar: user.photoURL || null, // Ensure null if photoURL is falsy
     };
 
     setIsLoadingAiResponse(true);
     let tempUserMessageId = Date.now().toString();
+    // Add optimistic UI update with a client-side Date object
     setMessages(prev => [...prev, { ...userMessageData, id: tempUserMessageId, timestamp: new Date() } as Message]);
 
 
     try {
       let actualSessionId = currentDbSessionId;
 
-      // Create new session if it's the first message
       if (!actualSessionId) {
         const sessionColRef = collection(db, 'users', user.uid, 'journalSessions');
         const newSessionDoc = await addDoc(sessionColRef, {
@@ -146,14 +154,9 @@ export default function JournalSessionPage() {
         setSessionTitle(`Journal - ${new Date().toLocaleDateString()}`);
       }
 
-      // Save user message
       const userMsgRef = await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), userMessageData);
-      // Update visual message with actual ID if needed (optional, onSnapshot should handle)
       setMessages(prev => prev.map(m => m.id === tempUserMessageId ? {...m, id: userMsgRef.id} : m));
 
-
-      // Prepare AI Flow Input
-      // Fetch user's active goals for coach mode
       let activeGoalText: string | undefined = undefined;
       if (currentTherapistMode === 'Coach') {
           const goalsQuery = query(collection(db, 'users', user.uid, 'goals'), where('isCompleted', '==', false), orderBy('createdAt', 'desc'), limit(1));
@@ -162,25 +165,33 @@ export default function JournalSessionPage() {
               activeGoalText = goalsSnapshot.docs[0].data().text;
           }
       }
+      
+      // Prepare message history for AI
+      const historyForAI: AiChatMessage[] = messages
+        .slice(-MAX_HISTORY_MESSAGES) // Get last N messages
+        .map(msg => ({ sender: msg.sender, text: msg.text }));
+      // Add the current user message to the history being sent to AI
+      historyForAI.push({ sender: 'user', text: userMessageText });
+
 
       const aiFlowInput: TherapistModeInput = {
         userInput: userMessageText,
         mode: currentTherapistMode,
-        goal: activeGoalText
+        goal: activeGoalText,
+        messageHistory: historyForAI 
       };
 
       const aiResponse = await getTherapistResponse(aiFlowInput);
 
-      const aiMessageData: Omit<Message, 'id'> = {
+      const aiMessageData: Omit<Message, 'id' | 'timestamp'> & { timestamp: any } = {
         text: aiResponse.response,
         sender: 'ai',
-        timestamp: serverTimestamp() as unknown as Timestamp,
+        timestamp: serverTimestamp(),
         name: 'ThoughtReflex AI',
         avatar: '/logo-ai.png',
       };
       await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), aiMessageData);
 
-      // Update session's lastUpdatedAt
       await updateDoc(doc(db, 'users', user.uid, 'journalSessions', actualSessionId!), {
         lastUpdatedAt: serverTimestamp()
       });
@@ -188,9 +199,8 @@ export default function JournalSessionPage() {
     } catch (error: any) {
       console.error("Error sending message or getting AI response:", error);
       toast({ title: "Error", description: error.message || "Could not process message.", variant: "destructive" });
-      // Restore input if send failed
       setInput(userMessageText);
-      setMessages(prev => prev.filter(m => m.id !== tempUserMessageId)); // Remove temp message
+      setMessages(prev => prev.filter(m => m.id !== tempUserMessageId)); 
     } finally {
       setIsLoadingAiResponse(false);
     }
@@ -244,16 +254,16 @@ export default function JournalSessionPage() {
         </div>
       </CardHeader>
 
-      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}> {/* Removed space-y-4 */}
         {messages.map((msg) => (
           <div
             key={msg.id}
             className={cn(
-              "group flex items-end gap-2.5 max-w-[80%] mb-5", // Increased gap and mb, added group
+              "group flex items-end gap-2.5 max-w-[80%] mb-5", 
               msg.sender === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
             )}
           >
-            <Avatar className="h-9 w-9 self-start"> {/* Slightly larger avatar, self-start to align with top of bubble */}
+            <Avatar className="h-9 w-9 self-start"> 
               <AvatarImage src={msg.avatar || undefined} data-ai-hint={msg.sender === 'user' ? 'profile user' : 'ai bot'} />
               <AvatarFallback>
                 {msg.sender === 'user' ? <User className="h-4 w-4" /> : <Brain className="h-4 w-4" />}
@@ -261,7 +271,7 @@ export default function JournalSessionPage() {
             </Avatar>
             <div
               className={cn(
-                "px-4 py-3 rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-200 ease-in-out", // Adjusted padding and added hover shadow
+                "px-4 py-3 rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-200 ease-in-out", 
                 msg.sender === 'user'
                   ? 'bg-primary text-primary-foreground rounded-br-none'
                   : 'bg-muted text-foreground rounded-bl-none'
@@ -269,7 +279,7 @@ export default function JournalSessionPage() {
             >
               <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
               <p className={cn(
-                  "text-xs mt-1.5 opacity-60 group-hover:opacity-100 transition-opacity duration-200", // Timestamp interactivity
+                  "text-xs mt-1.5 opacity-60 group-hover:opacity-100 transition-opacity duration-200", 
                   msg.sender === 'user' ? 'text-primary-foreground/80 text-right' : 'text-muted-foreground/80 text-left'
                 )}>
                 {(msg.timestamp instanceof Date ? msg.timestamp : new Date((msg.timestamp as Timestamp).seconds * 1000)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -323,3 +333,5 @@ export default function JournalSessionPage() {
     </div>
   );
 }
+
+    

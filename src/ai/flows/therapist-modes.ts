@@ -12,6 +12,13 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
+// Simplified Message type for AI flow context
+const AiChatMessageSchema = z.object({
+  sender: z.enum(['user', 'ai']),
+  text: z.string(),
+});
+type AiChatMessage = z.infer<typeof AiChatMessageSchema>;
+
 const TherapistModeInputSchema = z.object({
   userInput: z.string().describe('The user input to be processed.'),
   mode: z
@@ -19,6 +26,7 @@ const TherapistModeInputSchema = z.object({
     .describe('The selected therapist mode.'),
   weeklyRecap: z.string().optional().describe('A summary of the user’s week.'),
   goal: z.string().optional().describe('The user specified goal.'),
+  messageHistory: z.array(AiChatMessageSchema).optional().describe('The history of messages in the current session.')
 });
 export type TherapistModeInput = z.infer<typeof TherapistModeInputSchema>;
 
@@ -34,13 +42,14 @@ const therapistInstructions = {
   Friend: `You are in Friend mode. Be casual, warm, and conversational in your responses. Inject light questions to keep the mood balanced and welcoming.`,
 };
 
-// Internal schema for the prompt, including the pre-selected instruction
+// Internal schema for the prompt, including the pre-selected instruction and message history
 const TherapistModePromptInternalInputSchema = z.object({
   userInput: z.string().describe('The user input to be processed.'),
   mode: z.enum(['Therapist', 'Coach', 'Friend']).describe('The selected therapist mode (for context).'),
   weeklyRecap: z.string().optional().describe('A summary of the user’s week.'),
   goal: z.string().optional().describe('The user specified goal.'),
-  activeModeInstruction: z.string().describe('The specific instruction for the current AI mode.')
+  activeModeInstruction: z.string().describe('The specific instruction for the current AI mode.'),
+  messageHistory: z.array(AiChatMessageSchema).optional().describe('The history of messages in the current session.')
 });
 
 export async function getTherapistResponse(
@@ -51,29 +60,34 @@ export async function getTherapistResponse(
 
 const prompt = ai.definePrompt({
   name: 'therapistModePrompt',
-  input: {schema: TherapistModePromptInternalInputSchema}, // Use the new internal schema
+  input: {schema: TherapistModePromptInternalInputSchema}, 
   output: {schema: TherapistModeOutputSchema},
-  prompt: `You are an AI therapist. Respond to the user input based on the selected mode.
+  prompt: `{{{activeModeInstruction}}}
 
-User Input: {{{userInput}}}
-Selected Mode: {{{mode}}}
-
-{{#if weeklyRecap}}
-Weekly Recap: {{{weeklyRecap}}}
+{{#if messageHistory}}
+Here is the recent conversation history:
+{{#each messageHistory}}
+{{{this.sender}}}: {{{this.text}}}
+{{/each}}
 {{/if}}
 
 {{#if goal}}
-User Goal: {{{goal}}}
+Remember the user's current goal: {{{goal}}}
 {{/if}}
 
-{{{activeModeInstruction}}}
+{{#if weeklyRecap}}
+Also, consider this weekly recap: {{{weeklyRecap}}}
+{{/if}}
+
+Now, respond to the latest user input:
+User: {{{userInput}}}
 `,
 });
 
 const therapistModeFlow = ai.defineFlow(
   {
     name: 'therapistModeFlow',
-    inputSchema: TherapistModeInputSchema, // Flow's public input schema
+    inputSchema: TherapistModeInputSchema, 
     outputSchema: TherapistModeOutputSchema,
   },
   async (flowInput: TherapistModeInput) => {
@@ -81,13 +95,16 @@ const therapistModeFlow = ai.defineFlow(
     
     const promptPayload = {
       userInput: flowInput.userInput,
-      mode: flowInput.mode, // Pass mode for context if needed in prompt (e.g., "Mode: {{{mode}}}")
+      mode: flowInput.mode, 
       weeklyRecap: flowInput.weeklyRecap,
       goal: flowInput.goal,
-      activeModeInstruction: instruction, // Pass the selected instruction
+      activeModeInstruction: instruction,
+      messageHistory: flowInput.messageHistory, // Pass the message history
     };
 
     const {output} = await prompt(promptPayload);
     return output!;
   }
 );
+
+    

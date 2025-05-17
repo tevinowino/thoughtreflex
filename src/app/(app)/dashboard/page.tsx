@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, query, orderBy, limit, onSnapshot, where, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import type { WeeklyRecap } from '../recaps/page'; // For recap type
 
 interface RecentJournal {
   id: string;
@@ -31,7 +32,7 @@ export default function DashboardPage() {
   const [activeGoals, setActiveGoals] = useState<GoalSummary[]>([]);
   const [loadingJournals, setLoadingJournals] = useState(true);
   const [loadingGoals, setLoadingGoals] = useState(true);
-  // Placeholder for weekly recap, true if available
+  const [loadingRecap, setLoadingRecap] = useState(true);
   const [isRecapAvailable, setIsRecapAvailable] = useState(false); 
 
 
@@ -65,7 +66,7 @@ export default function DashboardPage() {
       collection(db, 'users', user.uid, 'goals'),
       where('isCompleted', '==', false),
       orderBy('createdAt', 'desc'),
-      limit(3) // Show a few active goals
+      limit(3)
     );
     const unsubscribeGoals = onSnapshot(goalsQuery, (snapshot) => {
       const fetchedGoals = snapshot.docs.map(doc => ({
@@ -81,14 +82,34 @@ export default function DashboardPage() {
       setLoadingGoals(false);
     });
     
-    // Mock check for weekly recap availability
-    // In a real app, query Firestore for the latest recap for the user
-    setIsRecapAvailable(Math.random() > 0.5);
+    // Fetch Latest Weekly Recap
+    setLoadingRecap(true);
+    const recapsQuery = query(
+      collection(db, 'users', user.uid, 'weeklyRecaps'),
+      orderBy('generatedAt', 'desc'),
+      limit(1)
+    );
+    const unsubscribeRecaps = onSnapshot(recapsQuery, (snapshot) => {
+      if (!snapshot.empty) {
+        // Potentially check if the recap is from the "current" or "last" week
+        // For now, just check if any recap exists
+        setIsRecapAvailable(true);
+      } else {
+        setIsRecapAvailable(false);
+      }
+      setLoadingRecap(false);
+    }, (error) => {
+      console.error("Error fetching weekly recaps:", error);
+      // Don't toast for this, as it's less critical for dashboard display
+      setIsRecapAvailable(false);
+      setLoadingRecap(false);
+    });
 
 
     return () => {
       unsubscribeJournals();
       unsubscribeGoals();
+      unsubscribeRecaps();
     };
   }, [user, toast]);
 
@@ -184,7 +205,11 @@ export default function DashboardPage() {
             <CardDescription>Review your emotional trends and victories.</CardDescription>
           </CardHeader>
           <CardContent>
-            {isRecapAvailable ? (
+            {loadingRecap ? (
+                <div className="flex items-center justify-center h-10">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+            ) : isRecapAvailable ? (
                  <p className="text-sm text-foreground">Your latest weekly recap is ready!</p>
             ) : (
                  <p className="text-sm text-muted-foreground">Your weekly recap is not yet available.</p>
@@ -229,3 +254,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    

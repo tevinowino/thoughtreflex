@@ -7,43 +7,59 @@ import { CalendarDays, Edit, FileText, ThumbsUp, Zap, Wind, Loader2 } from 'luci
 import Link from 'next/link';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { generateWeeklyRecap, WeeklyRecapInput } from '@/ai/flows/weekly-ai-recap';
 import { useAuth } from '@/contexts/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
 
-
-interface WeeklyRecap {
+export interface WeeklyRecap {
   id: string;
-  weekOf: string; // Consider storing start/end dates
+  weekOf: string;
   title: string;
-  summary: string; // This would be the AI generated recap.recap
-  emotionalHigh?: string; // From AI or user input
-  struggleOfTheWeek?: string; // From AI or user input
-  growthMoment?: string; // From AI or user input
-  generatedAt: Date;
+  summary: string;
+  emotionalHigh?: string;
+  struggleOfTheWeek?: string;
+  growthMoment?: string;
+  generatedAt: Date; // Ensure this is a Date object
+  userId: string;
 }
-
-// Mock data - in a real app, this would be fetched from Firestore
-const mockRecaps: WeeklyRecap[] = [
-  {
-    id: '1',
-    weekOf: 'October 23 - October 29, 2023',
-    title: "A Week of Navigating Change",
-    summary: "This week, you explored feelings of uncertainty related to upcoming work changes. You also celebrated a small personal victory and showed resilience in managing stress.",
-    emotionalHigh: "Feeling proud after completing a challenging project.",
-    struggleOfTheWeek: "Managing anxiety about the future.",
-    growthMoment: "You consciously used breathing exercises during a stressful moment, which you noted helped.",
-    generatedAt: new Date(Date.now() - 7 * 86400000)
-  },
-];
 
 export default function RecapsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [recaps, setRecaps] = useState<WeeklyRecap[]>(mockRecaps); // Later, fetch from Firestore
+  const [recaps, setRecaps] = useState<WeeklyRecap[]>([]);
+  const [isLoadingRecaps, setIsLoadingRecaps] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      setIsLoadingRecaps(false);
+      return;
+    }
+    setIsLoadingRecaps(true);
+    const recapsColRef = collection(db, 'users', user.uid, 'weeklyRecaps');
+    const q = query(recapsColRef, orderBy('generatedAt', 'desc'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedRecaps = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          generatedAt: (data.generatedAt as Timestamp)?.toDate ? (data.generatedAt as Timestamp).toDate() : new Date(),
+        } as WeeklyRecap;
+      });
+      setRecaps(fetchedRecaps);
+      setIsLoadingRecaps(false);
+    }, (error) => {
+      console.error("Error fetching recaps:", error);
+      toast({ title: "Error", description: "Could not fetch weekly recaps.", variant: "destructive" });
+      setIsLoadingRecaps(false);
+    });
+
+    return () => unsubscribe();
+  }, [user, toast]);
 
   const handleGenerateRecap = async () => {
     if (!user) {
@@ -68,30 +84,23 @@ export default function RecapsPage() {
 
       const result = await generateWeeklyRecap(recapInput);
       
-      const newRecap: Omit<WeeklyRecap, 'id' | 'generatedAt'> = { // Firestore will generate ID, generatedAt from serverTimestamp
-        weekOf: `Week of ${new Date().toLocaleDateString()}`, // Simple week indicator
+      const newRecapData: Omit<WeeklyRecap, 'id' | 'generatedAt'> = {
+        weekOf: `Week of ${new Date().toLocaleDateString()}`, 
         title: `Weekly Recap - ${new Date().toLocaleDateString()}`,
         summary: result.recap,
-        // Optional: The AI could also be prompted to generate these specific fields if desired
-        // emotionalHigh: "Identified by AI", 
-        // struggleOfTheWeek: "Identified by AI",
-        // growthMoment: "Identified by AI",
+        userId: user.uid,
+        // Optional fields can be added here if AI generates them or if user can input them later
       };
 
-      // Save to Firestore
-      const recapDocRef = await addDoc(collection(db, 'users', user.uid, 'weeklyRecaps'), {
-        ...newRecap,
-        userId: user.uid,
+      await addDoc(collection(db, 'users', user.uid, 'weeklyRecaps'), {
+        ...newRecapData,
         generatedAt: serverTimestamp(),
       });
+      // No need to manually add to local state, onSnapshot will update it.
       
-      // Add to local state (or refetch, but this is faster for immediate UI update)
-      setRecaps(prev => [{...newRecap, id: recapDocRef.id, generatedAt: new Date()}, ...prev]);
-
       toast({
-        title: "Weekly Recap Ready!",
-        description: "Your new weekly recap has been generated and saved.",
-        action: <Button variant="outline" size="sm" asChild><Link href={`/recaps/${recapDocRef.id}`}>View Now</Link></Button>,
+        title: "Weekly Recap Generated!",
+        description: "Your new weekly recap has been created and saved.",
       });
 
     } catch (error: any) {
@@ -105,6 +114,14 @@ export default function RecapsPage() {
       setIsGenerating(false);
     }
   };
+  
+  if (isLoadingRecaps) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -138,7 +155,7 @@ export default function RecapsPage() {
             <CardDescription>Your weekly AI-generated recaps will appear here after you've journaled for a bit.</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">Keep journaling to unlock your first recap!</p>
+            <p className="text-sm text-muted-foreground">Keep journaling or generate your first recap!</p>
           </CardContent>
         </Card>
       ) : (
@@ -152,7 +169,7 @@ export default function RecapsPage() {
                         <CardDescription className="text-sm">{recap.weekOf} (Generated: {recap.generatedAt.toLocaleDateString()})</CardDescription>
                     </div>
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary -mt-2 -mr-2" asChild>
-                        <Link href={`/recaps/${recap.id}`}> {/* Assuming a detail page for recaps later */}
+                        <Link href={`/recaps/${recap.id}`}>
                           <FileText className="h-5 w-5" />
                           <span className="sr-only">View full recap</span>
                         </Link>
@@ -212,7 +229,8 @@ export default function RecapsPage() {
           </div>
         </CardContent>
       </Card>
-
     </div>
   );
 }
+
+    
