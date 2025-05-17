@@ -1,7 +1,7 @@
 
 'use client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'; // Added CardFooter
 import { useAuth } from '@/contexts/auth-context';
 import { BookText, Target, Sparkles, CalendarCheck, Edit3, Loader2, Flame, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
