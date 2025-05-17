@@ -9,7 +9,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { reframeThoughtTool } from './reframe-thought-flow';
+import { reframeThoughtTool, ReframeThoughtOutputSchema, type ReframeThoughtOutput } from '@/ai/flows/reframe-thought-flow';
 
 const AiChatMessageSchema = z.object({
   sender: z.enum(['user', 'ai']),
@@ -30,6 +30,7 @@ export type TherapistModeInput = z.infer<typeof TherapistModeInputSchema>;
 const TherapistModeOutputSchema = z.object({
   response: z.string().describe('The AI’s conversational reply.'),
   suggestedGoalText: z.string().optional().describe('Optional goal suggested to help user make progress. Should be concise and actionable, starting with a verb (e.g., "Practice deep breathing for 5 minutes", "Write down one positive thing that happened today").'),
+  reframingData: ReframeThoughtOutputSchema.optional().describe("Structured data from a thought reframing attempt, if the user requested it and the tool was used.")
 });
 export type TherapistModeOutput = z.infer<typeof TherapistModeOutputSchema>;
 
@@ -102,6 +103,7 @@ Use the following dynamic variables to personalize your responses:
 ✅ Adjust your tone, pacing, and follow-up based on the selected mode, MBTI type (if known), and recent emotional context.
 ✅ If the user seems distressed, slow down. If they seem hopeful, gently guide them forward.
 ✅ If a 'currentGoal' is provided, especially in Coach or Therapist mode, consider checking in on it gently: "How are you feeling about your goal to [goal] lately?" or "Does what you're sharing now connect with your goal around [goal] at all?" Avoid being pushy.
+✅ When in Coach mode, if the conversation naturally leads to an opportunity for self-improvement, suggest a concrete, actionable micro-goal. Frame it positively, starting with a verb (e.g., "Try a 5-minute guided meditation for anxiety," "Consider writing down three small things you accomplished today," "Listen to one song that lifts your spirits").
 
 🎤 You’re not a chatbot. You’re Mira — the presence someone always wished they had.
 `,
@@ -173,7 +175,7 @@ const prompt = ai.definePrompt({
 
 If the user's MBTI type is provided (e.g., '{{mbtiType}}'), use this information to subtly tailor your communication. For example, if they identify as an 'Introvert' (I) type, ensure your responses provide ample space for reflection. If 'Extrovert' (E), you might be slightly more interactive. If 'Feeling' (F), lean into empathetic language. If 'Thinking' (T), a more logical framing might resonate. Do this subtly and without stereotyping.
 
-If the user explicitly asks for help to reframe a specific negative thought (e.g., "Can you help me reframe this thought: ...?" or "How can I think about X differently?"), use the 'reframeThoughtTool' to assist them. Incorporate the tool's output into your response naturally.
+If the user explicitly asks for help to reframe a specific negative thought (e.g., "Can you help me reframe this thought: ...?" or "How can I think about X differently?"), use the 'reframeThoughtTool' to assist them. Incorporate the tool's output into your response naturally, and also return the structured 'reframingData' in your output.
 
 Do not suggest using the reframeThoughtTool unless the user directly asks for thought reframing.
 
@@ -219,11 +221,12 @@ User's MBTI Type: **{{mbtiType}}** (Consider this to personalize your interactio
 1.  Respond in a way that matches the user's emotional state, preferred mode, and (if known) MBTI type, following the detailed instructions for **{{mode}}** mode.
 2.  Begin by validating the user's emotional experience. Avoid rushing into solutions.
 3.  Use the weekly recap, current user goal (if any), MBTI type (if any), and chat history as emotional and cognitive context.
-4.  If appropriate for the mode and conversation, provide an **actionable, short, and positive goal suggestion** in the 'suggestedGoalText' field of your output. The goal should start with a verb (e.g., "Write for 10 minutes every morning," "Try naming one emotion when you feel overwhelmed," "Go for a 5-minute walk when stressed"). Do this sparingly and only when it feels natural.
-5.  Your response should sound warm, thoughtful, human, and intelligent.
-6.  Keep the length between 3 to 6 sentences unless brevity is clearly preferred.
+4.  If appropriate for the mode and conversation (especially Coach mode), provide an **actionable, short, and positive goal suggestion** in the 'suggestedGoalText' field of your output. The goal should start with a verb (e.g., "Write for 10 minutes every morning," "Try naming one emotion when you feel overwhelmed," "Go for a 5-minute walk when stressed"). Do this sparingly and only when it feels natural.
+5.  If the 'reframeThoughtTool' was used, ensure its structured output is returned in the 'reframingData' field.
+6.  Your response should sound warm, thoughtful, human, and intelligent.
+7.  Keep the length between 3 to 6 sentences unless brevity is clearly preferred.
 
-Return your response in the specified JSON format for 'response' and 'suggestedGoalText'.
+Return your response in the specified JSON format for 'response', 'suggestedGoalText', and 'reframingData'.
 `,
 });
 
@@ -247,7 +250,11 @@ const therapistModeFlow = ai.defineFlow(
     };
 
     const { output } = await prompt(promptPayload);
-    return output!;
+    if (!output) {
+      throw new Error("AI failed to generate a response.");
+    }
+    
+    return output;
   }
 );
 
@@ -256,3 +263,4 @@ export async function getTherapistResponse(
 ): Promise<TherapistModeOutput> {
   return therapistModeFlow(input);
 }
+
