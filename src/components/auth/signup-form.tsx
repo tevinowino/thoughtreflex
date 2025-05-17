@@ -16,6 +16,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle, Loader2 } from "lucide-react";
 
 const formSchema = z.object({
   displayName: z.string().min(2, { message: 'Display name must be at least 2 characters.'}),
@@ -46,9 +48,10 @@ export function SignupForm() {
       await signUpWithEmail(values.email, values.password, values.displayName);
       // Successful signup is handled by AuthProvider redirect
     } catch (e: any) {
+      // Error state is set by useAuth, this toast is optional
       toast({
         title: 'Signup Failed',
-        description: e.message || error?.message || 'An unexpected error occurred.',
+        description: e.message || 'An unexpected error occurred.',
         variant: 'destructive',
       });
     }
@@ -64,7 +67,7 @@ export function SignupForm() {
             <FormItem>
               <FormLabel>Display Name</FormLabel>
               <FormControl>
-                <Input placeholder="Your Name" {...field} />
+                <Input placeholder="Your Name" {...field} className="bg-muted/30"/>
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -77,7 +80,7 @@ export function SignupForm() {
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input placeholder="you@example.com" {...field} />
+                <Input placeholder="you@example.com" {...field} className="bg-muted/30"/>
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -90,7 +93,7 @@ export function SignupForm() {
             <FormItem>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <Input type="password" placeholder="••••••••" {...field} />
+                <Input type="password" placeholder="••••••••" {...field} className="bg-muted/30"/>
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -103,14 +106,23 @@ export function SignupForm() {
             <FormItem>
               <FormLabel>Confirm Password</FormLabel>
               <FormControl>
-                <Input type="password" placeholder="••••••••" {...field} />
+                <Input type="password" placeholder="••••••••" {...field} className="bg-muted/30"/>
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        {error && !form.formState.isValid && <p className="text-sm font-medium text-destructive">{error.message}</p>}
-        <Button type="submit" className="w-full" disabled={loading}>
+        {error && (
+          <Alert variant="destructive" className="mt-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Signup Error</AlertTitle>
+            <AlertDescription>
+              {error.message || "An unexpected error occurred. Please try again."}
+            </AlertDescription>
+          </Alert>
+        )}
+        <Button type="submit" className="w-full shadow-md" disabled={loading}>
+          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           {loading ? 'Creating Account...' : 'Create Account'}
         </Button>
       </form>

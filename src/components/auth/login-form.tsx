@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -15,6 +16,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle, Loader2 } from "lucide-react";
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -37,11 +40,12 @@ export function LoginForm() {
     try {
       await signInWithEmail(values.email, values.password);
       // Successful login is handled by AuthProvider redirect
-    } catch (e) {
-      // Error is handled by AuthProvider, but can show a toast here too
+    } catch (e: any) {
+      // Error state is set by useAuth, this toast is optional
+      // but can be useful for immediate feedback if context update is slow.
       toast({
         title: 'Login Failed',
-        description: error?.message || 'An unexpected error occurred.',
+        description: e.message || 'An unexpected error occurred.',
         variant: 'destructive',
       });
     }
@@ -57,7 +61,7 @@ export function LoginForm() {
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input placeholder="you@example.com" {...field} />
+                <Input placeholder="you@example.com" {...field} className="bg-muted/30"/>
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -70,14 +74,23 @@ export function LoginForm() {
             <FormItem>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <Input type="password" placeholder="••••••••" {...field} />
+                <Input type="password" placeholder="••••••••" {...field} className="bg-muted/30"/>
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        {error && <p className="text-sm font-medium text-destructive">{error.message}</p>}
-        <Button type="submit" className="w-full" disabled={loading}>
+        {error && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Login Error</AlertTitle>
+            <AlertDescription>
+              {error.message || "An unexpected error occurred. Please try again."}
+            </AlertDescription>
+          </Alert>
+        )}
+        <Button type="submit" className="w-full shadow-md" disabled={loading}>
+          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           {loading ? 'Logging In...' : 'Log In'}
         </Button>
       </form>
