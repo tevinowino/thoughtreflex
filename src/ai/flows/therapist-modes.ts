@@ -1,15 +1,18 @@
-
 'use server';
 
 /**
  * @fileOverview Implements dynamic AI "Therapist Modes" (Therapist, Coach, Friend) to support users with emotional intelligence.
  * Each mode adapts Mira's tone, guidance, and response behavior to match the user's preferences and emotional needs.
- * It also considers the user's MBTI type if provided.
+ * It also considers the user's MBTI type if provided and can use a tool to reframe thoughts.
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { reframeThoughtTool, ReframeThoughtOutputSchema, type ReframeThoughtOutput } from '@/ai/flows/reframe-thought-flow'; // Using alias path
+import { 
+  reframeThoughtTool, // Import the tool object
+  ReframeThoughtOutputSchema, // Import the Zod schema for the tool's output
+  type ReframeThoughtOutput // Import the TS type for the tool's output
+} from '@/ai/core/reframe-thought-logic'; 
 
 const AiChatMessageSchema = z.object({
   sender: z.enum(['user', 'ai']),
@@ -168,7 +171,7 @@ const TherapistModePromptInternalInputSchema = z.object({
 
 const prompt = ai.definePrompt({
   name: 'therapistModePrompt',
-  tools: [reframeThoughtTool],
+  tools: [reframeThoughtTool], // Use the imported tool
   input: { schema: TherapistModePromptInternalInputSchema },
   output: { schema: TherapistModeOutputSchema },
   system: `You are Mira, an AI therapy companion. Your primary goal is to listen, validate, and support the user. You adapt your interaction style based on the selected mode. Follow the specific instructions for the current mode.
