@@ -3,7 +3,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, BookOpen, Loader2 } from 'lucide-react';
+import { PlusCircle, BookOpen, Loader2, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/auth-context';
@@ -17,7 +17,7 @@ interface JournalSession {
   title: string;
   createdAt: Timestamp | Date;
   lastUpdatedAt: Timestamp | Date;
-  firstMessagePreview?: string; // Optional: store first few words of first message
+  firstMessagePreview?: string; 
   userId: string;
 }
 
@@ -69,7 +69,7 @@ export default function JournalPage() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Your Journal</h1>
           <p className="text-muted-foreground">
-            A private space for your thoughts, reflections, and conversations.
+            A private space for your thoughts, reflections, and conversations with Mira.
           </p>
         </div>
         <Button asChild size="lg">
@@ -78,8 +78,16 @@ export default function JournalPage() {
           </Link>
         </Button>
       </div>
+      
+      <Card className="bg-muted/50 border-primary/30 shadow-sm">
+        <CardContent className="p-3 text-sm text-primary-foreground flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5 text-primary" />
+          <span className="text-foreground/80">Your journal entries are private and confidential.</span>
+        </CardContent>
+      </Card>
 
-      {sessions.length === 0 ? (
+
+      {sessions.length === 0 && !isLoading ? (
         <Card className="text-center py-12 shadow-lg rounded-2xl">
           <CardHeader>
             <div className="mx-auto bg-secondary p-3 rounded-full w-fit">

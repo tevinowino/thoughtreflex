@@ -1,3 +1,4 @@
+
 import Link from 'next/link';
 import { Brain, Twitter, Github, Linkedin } from 'lucide-react'; // Or other social icons
 

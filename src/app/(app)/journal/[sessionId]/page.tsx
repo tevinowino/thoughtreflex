@@ -74,7 +74,7 @@ export default function JournalSessionPage() {
       setSessionTitle('New Journal Session');
       setEditableSessionTitle('New Journal Session');
       setMessages([
-        { id: '0', text: "Welcome! I'm Mira. I'm here to listen. What's on your mind today?", sender: 'ai', timestamp: new Date(), name: 'Mira', avatar: '/logo-ai.png' },
+        { id: '0', text: "Welcome! I'm Mira. I'm here to listen, and please know this space is private and confidential. What's on your mind today?", sender: 'ai', timestamp: new Date(), name: 'Mira', avatar: '/logo-ai.png' },
       ]);
       setIsLoadingSession(false);
       setCurrentDbSessionId(null); 
@@ -412,7 +412,7 @@ export default function JournalSessionPage() {
               <DialogFooter className="justify-between sm:justify-between">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive" disabled={isDeletingSession}>
+                     <Button variant="destructive" disabled={isDeletingSession}>
                       {isDeletingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                       Delete Session
                     </Button>
@@ -543,4 +543,3 @@ export default function JournalSessionPage() {
     </div>
   );
 }
-

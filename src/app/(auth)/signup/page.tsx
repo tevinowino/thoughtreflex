@@ -1,3 +1,4 @@
+
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { SignupForm } from '@/components/auth/signup-form';
@@ -32,6 +33,7 @@ export default function SignupPage() {
           </Link>
         </p>
         <p className="px-8 text-center text-xs text-muted-foreground">
+            Your privacy is important to us. All your entries are confidential.
             By clicking continue, you agree to our{" "}
             <Link href="/terms" className="underline underline-offset-4 hover:text-primary">
               Terms of Service

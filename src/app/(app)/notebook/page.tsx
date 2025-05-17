@@ -3,7 +3,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, NotebookPen as NotebookIcon, Loader2, Edit3 } from 'lucide-react'; // Renamed to avoid conflict
+import { PlusCircle, NotebookPen as NotebookIcon, Loader2, Edit3, ShieldCheck } from 'lucide-react'; // Renamed to avoid conflict
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/auth-context';
@@ -108,7 +108,14 @@ export default function NotebookPage() {
         </Button>
       </div>
 
-      {entries.length === 0 ? (
+      <Card className="bg-muted/50 border-primary/30 shadow-sm">
+        <CardContent className="p-3 text-sm text-primary-foreground flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5 text-primary" />
+          <span className="text-foreground/80">Your notebook entries are private and for your eyes only.</span>
+        </CardContent>
+      </Card>
+
+      {entries.length === 0 && !isLoading ? (
         <Card className="text-center py-12 shadow-lg rounded-2xl">
           <CardHeader>
             <div className="mx-auto bg-secondary p-3 rounded-full w-fit">
