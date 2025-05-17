@@ -2,7 +2,7 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BrainCircuit, MessageSquare, ShieldCheck, CalendarCheck, Target, TrendingUp } from 'lucide-react'; // Updated icons
+import { BrainCircuit, MessageSquare, ShieldCheck, CalendarCheck, Target, TrendingUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const features = [
@@ -40,22 +40,24 @@ const features = [
 
 const cardVariants = {
   hidden: { opacity: 0, y: 20 },
-  visible: (i: number) => ({
+  visible: {
     opacity: 1,
     y: 0,
     transition: {
-      delay: i * 0.1,
+      // Re-add simplified transition without function for now if previous step was reverted
+      // delay: index * 0.1, // This would require the functional variant if used
       duration: 0.5,
       ease: "easeOut"
     }
-  })
+  }
 };
+
 
 export function FeaturesSection() {
   return (
     <section id="features" className="w-full py-16 md:py-24 lg:py-32 bg-background">
       <div className="container px-4 md:px-6">
-        <motion.div 
+        <motion.div
           className="flex flex-col items-center justify-center space-y-4 text-center mb-16"
           initial={{ opacity: 0, y: -20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -74,11 +76,13 @@ export function FeaturesSection() {
           {features.map((feature, index) => (
             <motion.div
               key={feature.title}
-              custom={index}
               initial="hidden"
               whileInView="visible"
               viewport={{ once: true, amount: 0.3 }}
               variants={cardVariants}
+              // If using functional variants with 'custom', ensure it's here
+              // custom={index} 
+              transition={{ delay: index * 0.1 }} // Apply staggered delay directly if not using functional variant
             >
               <Card className="h-full shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out rounded-2xl overflow-hidden transform hover:-translate-y-1">
                 <CardHeader className="flex flex-col items-center text-center gap-4 p-6 bg-muted/50">
