@@ -32,19 +32,22 @@ export function AppHeader() {
   };
 
   const currentStreak = user?.currentStreak || 0;
-  let flameColorClass = 'text-primary'; // Default for 1-9 days
+  let flameColorClass = 'text-primary'; 
   let flameAnimationClass = '';
 
   if (currentStreak === 0) {
-    flameColorClass = 'text-muted-foreground/70';
+    flameColorClass = 'text-muted-foreground/60'; // More muted for 0
+  } else if (currentStreak >= 1 && currentStreak <= 9) {
+    flameColorClass = 'text-primary/80'; // Slightly less intense primary for early days
   } else if (currentStreak >= 10 && currentStreak <= 19) {
-    flameColorClass = 'text-red-500';
+    flameColorClass = 'text-red-500 dark:text-red-400';
   } else if (currentStreak >= 20 && currentStreak <= 99) {
-    flameColorClass = 'text-green-500';
+    flameColorClass = 'text-green-500 dark:text-green-400';
   } else if (currentStreak >= 100) {
-    flameColorClass = 'text-orange-500';
+    flameColorClass = 'text-orange-500 dark:text-orange-400';
     flameAnimationClass = 'animate-pulse';
   }
+
 
   return (
     <header className="sticky top-0 z-40 w-full flex h-14 sm:h-16 items-center gap-2 sm:gap-4 border-b bg-card px-3 sm:px-4 md:px-6 shadow-sm">
@@ -74,8 +77,20 @@ export function AppHeader() {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className={cn("h-8 w-8 sm:h-9 sm:w-9", flameColorClass)}>
-                  <Flame className={cn("h-5 w-5 sm:h-6 sm:w-6", flameAnimationClass)} />
+                <Button variant="ghost" size="icon" className={cn("h-8 w-8 sm:h-9 sm:w-9 relative", flameColorClass)}>
+                  <Flame className={cn("h-[22px] w-[22px] sm:h-6 sm:w-6", flameAnimationClass)} />
+                  {currentStreak > 0 && (
+                    <span
+                      className={cn(
+                        "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[55%] text-[9px] sm:text-[10px] font-bold text-white",
+                        "drop-shadow-[0_0.8px_0.8px_rgba(0,0,0,0.6)] dark:drop-shadow-[0_0.8px_0.8px_rgba(0,0,0,0.9)]" // Text shadow for legibility
+                      )}
+                      // To ensure text is readable, consider a background for the number if shadow isn't enough.
+                      // Or adjust text color based on flameColorClass. For now, white with shadow.
+                    >
+                      {currentStreak}
+                    </span>
+                  )}
                   <span className="sr-only">Journaling Streak</span>
                 </Button>
               </TooltipTrigger>
