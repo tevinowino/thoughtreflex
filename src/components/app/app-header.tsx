@@ -1,3 +1,4 @@
+
 // src/components/app/app-header.tsx
 'use client';
 
@@ -12,10 +13,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '@/contexts/auth-context';
-import { Brain, LayoutDashboard, LogOut, Settings, UserCircle, Menu, Star, Edit3, HelpCircle } from 'lucide-react';
+import { Brain, LayoutDashboard, LogOut, Settings, UserCircle, Menu, Star, Edit3, HelpCircle, Flame } from 'lucide-react';
 import { useSidebar } from '@/components/ui/sidebar';
 import { ModeToggle } from '@/components/mode-toggle';
+import { cn } from '@/lib/utils';
 
 export function AppHeader() {
   const { user, signOut, loading } = useAuth();
@@ -27,6 +30,21 @@ export function AppHeader() {
     if (names.length === 1) return names[0].substring(0, 2).toUpperCase();
     return (names[0][0] + names[names.length - 1][0]).toUpperCase();
   };
+
+  const currentStreak = user?.currentStreak || 0;
+  let flameColorClass = 'text-primary'; // Default for 1-9 days
+  let flameAnimationClass = '';
+
+  if (currentStreak === 0) {
+    flameColorClass = 'text-muted-foreground/70';
+  } else if (currentStreak >= 10 && currentStreak <= 19) {
+    flameColorClass = 'text-red-500';
+  } else if (currentStreak >= 20 && currentStreak <= 99) {
+    flameColorClass = 'text-green-500';
+  } else if (currentStreak >= 100) {
+    flameColorClass = 'text-orange-500';
+    flameAnimationClass = 'animate-pulse';
+  }
 
   return (
     <header className="sticky top-0 z-40 w-full flex h-14 sm:h-16 items-center gap-2 sm:gap-4 border-b bg-card px-3 sm:px-4 md:px-6 shadow-sm">
@@ -43,7 +61,7 @@ export function AppHeader() {
         </Link>
       </div>
       
-      <div className="flex flex-1 items-center gap-1.5 sm:gap-2 md:gap-4 justify-end">
+      <div className="flex flex-1 items-center gap-1.5 sm:gap-2 md:gap-3 justify-end">
          <Button variant="ghost" size="sm" className="hidden xs:inline-flex items-center gap-1.5 text-muted-foreground hover:text-primary" asChild>
             <Link href="/journal/new">
               <Edit3 className="h-3.5 w-3.5 sm:h-4 sm:w-4"/>
@@ -51,6 +69,23 @@ export function AppHeader() {
               <span className="sm:hidden">New</span>
             </Link>
         </Button>
+
+        {user && !loading && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className={cn("h-8 w-8 sm:h-9 sm:w-9", flameColorClass)}>
+                  <Flame className={cn("h-5 w-5 sm:h-6 sm:w-6", flameAnimationClass)} />
+                  <span className="sr-only">Journaling Streak</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="bg-popover text-popover-foreground border-border shadow-lg rounded-md">
+                <p>Current Streak: {currentStreak} {currentStreak === 1 ? 'day' : 'days'}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
         <ModeToggle />
         {user && !loading ? (
           <DropdownMenu>
@@ -104,3 +139,4 @@ export function AppHeader() {
     </header>
   );
 }
+
