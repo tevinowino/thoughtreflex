@@ -36,7 +36,8 @@ import {
   DialogFooter as ReauthDialogFooter,
 } from "@/components/ui/dialog";
 import { EmailAuthProvider, GoogleAuthProvider, reauthenticateWithPopup, reauthenticateWithCredential } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';

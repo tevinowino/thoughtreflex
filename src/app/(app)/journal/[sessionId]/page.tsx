@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, ImageIcon, Save } from 'lucide-react';
 import { useAuth, UserProfile } from '@/contexts/auth-context'; 
-import { CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -390,6 +390,112 @@ export default function JournalSessionPage() {
     Friend: <Smile className="mr-2 h-4 w-4" />,
   };
 
+  const ChatBubble = ({ message, handleAddSuggestedGoal, handleSaveMindShift }) => {
+    const isUserMessage = message.sender === 'user';
+    const timestamp = message.timestamp instanceof Date 
+      ? message.timestamp 
+      : new Date((message.timestamp as Timestamp).seconds * 1000);
+    
+    return (
+      <motion.div
+        key={message.id}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className={cn(
+          "group flex items-start gap-2 sm:gap-3 max-w-[90%] xs:max-w-[85%] sm:max-w-[75%] my-4  ",
+          isUserMessage ? 'ml-auto flex-row-reverse' : 'mr-auto'
+        )}
+      >
+        <Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0 shadow-sm border-2 border-background"> 
+          <AvatarImage src={message.avatar || undefined} alt={isUserMessage ? "User" : "Assistant"} />
+          <AvatarFallback className={cn(
+            isUserMessage 
+              ? 'bg-secondary text-secondary-foreground' 
+              : 'bg-primary/20 text-primary text-xs'
+          )}>
+            {isUserMessage 
+              ? <User className="h-4 w-4 sm:h-5 sm:w-5" /> 
+              : <Brain className="h-4 w-4 sm:h-5 sm:w-5" />
+            }
+          </AvatarFallback>
+        </Avatar>
+        
+        <div className="flex flex-col gap-1">
+          <div
+            className={cn(
+              "px-3 py-2 sm:px-4 sm:py-3 rounded-2xl shadow-md group-hover:shadow-lg transition-shadow duration-200 ease-in-out text-sm", 
+              isUserMessage
+                ? 'bg-primary text-primary-foreground rounded-br-none'
+                : 'bg-muted text-foreground rounded-bl-none'
+            )}
+          >
+            <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
+            <p className={cn(
+              "text-[10px] sm:text-[11px] mt-1.5 sm:mt-2 opacity-50 group-hover:opacity-100 transition-opacity duration-300", 
+              isUserMessage ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground text-left'
+            )}>
+              {timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+  
+          {/* Goal suggestion component */}
+          {!isUserMessage && message.suggestedGoalText && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              transition={{ duration: 0.3, delay: 0.2, ease: "easeOut" }}
+              className="mt-1 sm:mt-2 pt-2 sm:pt-3 border border-primary/20 bg-accent/10 p-2.5 sm:p-3 rounded-xl shadow-sm"
+            >
+              <p className="text-xs font-semibold text-primary/90 mb-1 sm:mb-1.5">Mira's Goal Suggestion:</p>
+              <p className="text-xs sm:text-sm text-foreground/90 italic mb-1.5 sm:mb-2">"{message.suggestedGoalText}"</p>
+              {!message.isGoalAdded ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs h-auto py-1 px-2 sm:py-1.5 sm:px-3 border-primary/50 text-primary hover:bg-primary/10 hover:text-primary"
+                  onClick={() => handleAddSuggestedGoal(message.id, message.suggestedGoalText)}
+                >
+                  <PlusCircle className="mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" /> Add this goal
+                </Button>
+              ) : (
+                <p className="text-xs text-green-600 dark:text-green-400 flex items-center font-medium">
+                  <CheckCircle className="mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Goal added!
+                </p>
+              )}
+            </motion.div>
+          )}
+  
+          {/* Mind shift suggestion component */}
+          {!isUserMessage && message.reframingData && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              transition={{ duration: 0.3, delay: 0.2, ease: "easeOut" }}
+              className="mt-1 sm:mt-2 pt-2 sm:pt-3 border border-purple-500/20 bg-purple-500/10 dark:bg-purple-600/20 p-2.5 sm:p-3 rounded-xl shadow-sm"
+            >
+              <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mb-1.5">Mira's Mind Shift Suggestion:</p>
+              {!message.isReframingSaved ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs h-auto py-1 px-2 sm:py-1.5 sm:px-3 border-purple-500/50 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 hover:text-purple-700 dark:hover:text-purple-300"
+                  onClick={() => handleSaveMindShift(message.id, message.reframingData)}
+                >
+                  <Save className="mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" /> Save this Mind Shift
+                </Button>
+              ) : (
+                <p className="text-xs text-green-600 dark:text-green-400 flex items-center font-medium">
+                  <CheckCircle className="mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Mind Shift Saved!
+                </p>
+              )}
+            </motion.div>
+          )}
+        </div>
+      </motion.div>
+    );
+  };
+
   if (authLoading || (isLoadingSession && initialSessionId !== 'new')) {
      return (
       <div className="flex flex-col h-[calc(100vh-theme(spacing.32))] md:h-[calc(100vh-theme(spacing.24))] bg-card rounded-2xl shadow-xl overflow-hidden items-center justify-center">
@@ -400,36 +506,61 @@ export default function JournalSessionPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-theme(spacing.28)-2rem)] md:h-[calc(100vh-theme(spacing.20)-2rem)] bg-card rounded-2xl shadow-2xl overflow-hidden">
-      <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-4 border-b bg-muted/30">
-        <div className="flex items-center gap-1 sm:gap-2 min-w-0">
-          <Button variant="ghost" size="icon" asChild className="hover:bg-primary/10 shrink-0">
+    <Card className="flex flex-col h-[calc(100vh-4rem)] sm:h-[calc(100vh-3rem)] bg-card rounded-lg sm:rounded-xl lg:rounded-2xl shadow-lg sm:shadow-xl overflow-hidden border">
+      {/* Header Section */}
+      <CardHeader className="flex flex-row items-center justify-between p-2 xs:p-3 sm:p-4 border-b bg-muted/30 gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 min-w-0 overflow-hidden">
+          <Button variant="ghost" size="icon" asChild className="hover:bg-primary/10 shrink-0 h-8 w-8 sm:h-9 sm:w-9">
             <Link href="/journal">
-              <ArrowLeft className="h-5 w-5 text-primary" />
+              <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
               <span className="sr-only">Back to Journals</span>
             </Link>
           </Button>
-          <div className="min-w-0">
-             <CardTitle className="text-base sm:text-lg md:text-xl font-semibold truncate text-foreground">{sessionTitle}</CardTitle>
+          <div className="min-w-0 truncate">
+            <CardTitle className="text-xs sm:text-sm md:text-base truncate">{sessionTitle}</CardTitle>
           </div>
         </div>
+        
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          <Select value={currentTherapistMode} onValueChange={(value: TherapistMode) => setCurrentTherapistMode(value)}>
-            <SelectTrigger className="w-[110px] sm:w-[150px] h-8 sm:h-9 text-xs sm:text-sm shadow-sm">
+          {/* Therapist Mode Selector */}
+          <Select value={currentTherapistMode} onValueChange={(value) => setCurrentTherapistMode(value)}>
+            <SelectTrigger className="w-[100px] xs:w-[110px] sm:w-[150px] h-8 sm:h-9 text-xs sm:text-sm shadow-sm">
               <div className="flex items-center">
-                {React.cloneElement(modeIcons[currentTherapistMode], {className: "mr-1 sm:mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4"})}
                 <SelectValue placeholder="Select Mode" />
               </div>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Therapist"><div className="flex items-center"><Brain className="mr-2 h-4 w-4" /> Therapist</div></SelectItem>
-              <SelectItem value="Coach"><div className="flex items-center"><Zap className="mr-2 h-4 w-4" /> Coach</div></SelectItem>
-              <SelectItem value="Friend"><div className="flex items-center"><Smile className="mr-2 h-4 w-4" /> Friend</div></SelectItem>
+              <SelectItem value="Therapist">
+                <div className="flex items-center">
+                  <Brain className="mr-2 h-4 w-4" />
+                  <span>Therapist</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="Coach">
+                <div className="flex items-center">
+                  <Zap className="mr-2 h-4 w-4" />
+                  <span>Coach</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="Friend">
+                <div className="flex items-center">
+                  <Smile className="mr-2 h-4 w-4" />
+                  <span>Friend</span>
+                </div>
+              </SelectItem>
             </SelectContent>
           </Select>
+          
+          {/* Settings Dialog */}
           <Dialog open={isSessionSettingsOpen} onOpenChange={setIsSessionSettingsOpen}>
             <DialogTrigger asChild>
-              <Button variant="ghost" size="icon" disabled={!currentDbSessionId} onClick={() => setEditableSessionTitle(sessionTitle)} className="hover:bg-primary/10 h-8 w-8 sm:h-9 sm:w-9">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                disabled={!currentDbSessionId} 
+                onClick={() => setEditableSessionTitle(sessionTitle)} 
+                className="hover:bg-primary/10 h-8 w-8 sm:h-9 sm:w-9"
+              >
                 <Settings2 className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                 <span className="sr-only">Session Settings</span>
               </Button>
@@ -449,11 +580,15 @@ export default function JournalSessionPage() {
                   className="bg-muted/50"
                 />
               </div>
-              <DialogFooter className="flex-col sm:flex-row sm:justify-between gap-2 pt-4">
+              <DialogFooter className="flex gap-2 flex-col xs:flex-row xs:justify-between pt-4">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                     <Button variant="destructive" className={cn( "w-full sm:w-auto")} disabled={isDeletingSession}>
-                      {isDeletingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                    <Button variant="destructive" className="w-full xs:w-auto" disabled={isDeletingSession}>
+                      {isDeletingSession ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="mr-2 h-4 w-4" />
+                      )}
                       Delete Session
                     </Button>
                   </AlertDialogTrigger>
@@ -466,15 +601,34 @@ export default function JournalSessionPage() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleDeleteSession} className={cn(buttonVariants({ variant: "destructive" }))} disabled={isDeletingSession}>
-                         {isDeletingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Yes, Delete Session"}
+                      <AlertDialogAction 
+                        onClick={handleDeleteSession} 
+                        className={cn(buttonVariants({ variant: "destructive" }))} 
+                        disabled={isDeletingSession}
+                      >
+                        {isDeletingSession ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          "Yes, Delete Session"
+                        )}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setIsSessionSettingsOpen(false)}>Cancel</Button>
-                  <Button onClick={handleSaveSessionTitle} className="shadow-sm">Save Title</Button>
+                <div className="flex gap-2 w-full xs:w-auto">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setIsSessionSettingsOpen(false)}
+                    className="flex-1 xs:flex-none"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleSaveSessionTitle} 
+                    className="shadow-sm flex-1 xs:flex-none"
+                  >
+                    Save Title
+                  </Button>
                 </div>
               </DialogFooter>
             </DialogContent>
@@ -482,117 +636,63 @@ export default function JournalSessionPage() {
         </div>
       </CardHeader>
 
+      {/* Chat Messages Area */}
       <ScrollArea className="flex-1" viewportRef={viewportRef} ref={scrollAreaRef}>
-        <div className="space-y-0 p-4"> {/* Removed space-y-4 from here */}
-        {messages.map((msg) => (
-          <motion.div
-            key={msg.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-            className={cn(
-              "group flex items-end gap-2 max-w-[85%] sm:max-w-[75%] mb-4", // Added mb-4 here
-              msg.sender === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
-            )}
-          >
-            <Avatar className="h-8 w-8 sm:h-10 sm:w-10 self-start shadow-sm border-2 border-background"> 
-              <AvatarImage src={msg.avatar || undefined} />
-              <AvatarFallback className={cn(msg.sender === 'user' ? 'bg-secondary text-secondary-foreground' : 'bg-primary/20 text-primary text-xs')}>
-                {msg.sender === 'user' ? <User className="h-4 w-4 sm:h-5 sm:w-5" /> : <Brain className="h-4 w-4 sm:h-5 sm:w-5" />}
-              </AvatarFallback>
-            </Avatar>
-            <div
-              className={cn(
-                "px-3 py-2 sm:px-4 sm:py-3 rounded-2xl shadow-md group-hover:shadow-xl transition-shadow duration-200 ease-in-out text-sm", 
-                msg.sender === 'user'
-                  ? 'bg-primary text-primary-foreground rounded-br-lg'
-                  : 'bg-muted text-foreground rounded-bl-lg'
-              )}
+        <div className="p-3 xs:p-4 space-y-0">
+          {messages.map((message) => (
+            <ChatBubble 
+              key={message.id}
+              message={message}
+              handleAddSuggestedGoal={handleAddSuggestedGoal}
+              handleSaveMindShift={handleSaveMindShift}
+            />
+          ))}
+          
+          {/* Loading Animation */}
+          {isLoadingAiResponse && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex items-start gap-2 sm:gap-3 mr-auto mb-4"
             >
-              <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
-               {msg.sender === 'ai' && msg.suggestedGoalText && (
-                <motion.div 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    transition={{ duration: 0.3, delay: 0.2, ease: "easeOut" }}
-                    className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-primary/30 bg-accent/10 p-2.5 sm:p-3 rounded-md"
-                >
-                  <p className="text-xs font-semibold text-primary/90 mb-1 sm:mb-1.5">Mira's Goal Suggestion:</p>
-                  <p className="text-xs sm:text-sm text-foreground/90 italic mb-1.5 sm:mb-2">"{msg.suggestedGoalText}"</p>
-                  {!msg.isGoalAdded ? (
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs h-auto py-1 px-2 sm:py-1.5 sm:px-3 border-primary/50 text-primary hover:bg-primary/10 hover:text-primary"
-                        onClick={() => handleAddSuggestedGoal(msg.id, msg.suggestedGoalText!)}
-                    >
-                        <PlusCircle className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" /> Add this goal
-                    </Button>
-                  ) : (
-                     <p className="text-xs text-green-600 dark:text-green-400 flex items-center font-medium">
-                        <CheckCircle className="mr-1 sm:mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Goal added!
-                      </p>
-                  )}
-                </motion.div>
-              )}
-              {msg.sender === 'ai' && msg.reframingData && (
-                  <motion.div 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    transition={{ duration: 0.3, delay: 0.2, ease: "easeOut" }}
-                    className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-purple-500/30 bg-purple-500/10 dark:bg-purple-600/20 p-2.5 sm:p-3 rounded-md"
-                  >
-                    <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mb-1.5">Mira's Mind Shift Suggestion:</p>
-                    {!msg.isReframingSaved ? (
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-xs h-auto py-1 px-2 sm:py-1.5 sm:px-3 border-purple-500/50 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 hover:text-purple-700 dark:hover:text-purple-300"
-                            onClick={() => handleSaveMindShift(msg.id, msg.reframingData!)}
-                        >
-                        <Save className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" /> Save this Mind Shift
-                        </Button>
-                    ) : (
-                        <p className="text-xs text-green-600 dark:text-green-400 flex items-center font-medium">
-                            <CheckCircle className="mr-1 sm:mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Mind Shift Saved!
-                        </p>
-                    )}
-                  </motion.div>
-              )}
-              <p className={cn(
-                  "text-[10px] sm:text-[11px] mt-1.5 sm:mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in-out", 
-                  msg.sender === 'user' ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground text-left'
-                )}>
-                {(msg.timestamp instanceof Date ? msg.timestamp : new Date((msg.timestamp as Timestamp).seconds * 1000)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </p>
-            </div>
-          </motion.div>
-        ))}
-        {isLoadingAiResponse && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-end gap-2 mr-auto mb-4" // Added mb-4 here
-          >
-            <Avatar className="h-8 w-8 sm:h-10 sm:w-10 self-start shadow-sm">
+              <Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0 shadow-sm border-2 border-background">
                 <AvatarImage src="/logo-ai.png" alt="Mira AI" />
-              <AvatarFallback className="bg-muted text-primary"><Brain className="h-4 w-4 sm:h-5 sm:w-5 animate-pulse" /></AvatarFallback>
-            </Avatar>
-            <div className="px-3 py-2 sm:px-4 sm:py-3 rounded-2xl shadow-md bg-muted text-foreground rounded-bl-lg">
-              <p className="text-sm italic text-muted-foreground">Mira is typing...</p>
-            </div>
-          </motion.div>
-        )}
+                <AvatarFallback className="bg-muted text-primary">
+                  <Brain className="h-4 w-4 sm:h-5 sm:w-5 animate-pulse" />
+                </AvatarFallback>
+              </Avatar>
+              <div className="px-3 py-2 sm:px-4 sm:py-3 rounded-2xl rounded-bl-none shadow-md bg-muted text-foreground flex items-center">
+                <div className="flex gap-1 items-center">
+                  <motion.span
+                    animate={{ opacity: [0.4, 1, 0.4] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                    className="h-2 w-2 bg-primary/60 rounded-full"
+                  />
+                  <motion.span
+                    animate={{ opacity: [0.4, 1, 0.4] }}
+                    transition={{ duration: 1.5, repeat: Infinity, delay: 0.2 }}
+                    className="h-2 w-2 bg-primary/60 rounded-full"
+                  />
+                  <motion.span
+                    animate={{ opacity: [0.4, 1, 0.4] }}
+                    transition={{ duration: 1.5, repeat: Infinity, delay: 0.4 }}
+                    className="h-2 w-2 bg-primary/60 rounded-full"
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )}
         </div>
       </ScrollArea>
 
-      <form onSubmit={handleSendMessage} className="border-t p-3 bg-muted/30">
+      {/* Message Input Area */}
+      <form onSubmit={handleSendMessage} className="border-t p-2 xs:p-3 bg-muted/30">
         <div className="relative flex items-center">
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Share your thoughts here..."
-            className="pr-20 sm:pr-24 resize-none min-h-[50px] sm:min-h-[56px] max-h-[140px] sm:max-h-[160px] rounded-xl text-sm sm:text-base border-input focus:border-primary shadow-sm"
+            className="pr-16 xs:pr-20 sm:pr-24 resize-none min-h-[48px] xs:min-h-[50px] sm:min-h-[56px] max-h-[120px] xs:max-h-[140px] sm:max-h-[160px] rounded-lg sm:rounded-xl text-sm sm:text-base border-input focus:border-primary shadow-sm"
             rows={1}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -601,19 +701,32 @@ export default function JournalSessionPage() {
               }
             }}
           />
-          <div className="absolute right-1.5 sm:right-2 top-1/2 -translate-y-1/2 flex gap-0.5 sm:gap-1">
-            <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-primary h-8 w-8 sm:h-9 sm:w-9" onClick={() => toast({title: "Coming Soon!", description:"Voice input will be available in a future update."})}>
-              <Mic className="h-4 w-4 sm:h-5 sm:w-5" />
+          <div className="absolute right-1 xs:right-1.5 sm:right-2 top-1/2 -translate-y-1/2 flex gap-0.5 sm:gap-1">
+            <Button 
+              type="button" 
+              variant="ghost" 
+              size="icon" 
+              className="text-muted-foreground hover:text-primary h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9" 
+              onClick={() => toast({
+                title: "Coming Soon!", 
+                description: "Voice input will be available in a future update."
+              })}
+            >
+              <Mic className="h-3.5 w-3.5 xs:h-4 xs:w-4 sm:h-5 sm:w-5" />
               <span className="sr-only">Voice Input</span>
             </Button>
-            <Button type="submit" size="icon" disabled={isLoadingAiResponse || !input.trim()} className="rounded-lg shadow-md h-8 w-8 sm:h-9 sm:w-9">
-              <Send className="h-4 w-4 sm:h-5 sm:w-5" />
+            <Button 
+              type="submit" 
+              size="icon" 
+              disabled={isLoadingAiResponse || !input.trim()} 
+              className="rounded-lg shadow-md h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9"
+            >
+              <Send className="h-3.5 w-3.5 xs:h-4 xs:w-4 sm:h-5 sm:w-5" />
               <span className="sr-only">Send Message</span>
             </Button>
           </div>
         </div>
       </form>
-    </div>
-  );
+    </Card>  );
 }
 
