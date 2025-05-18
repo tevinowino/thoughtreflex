@@ -36,9 +36,9 @@ export default function FeedbackPage() {
     setIsSubmitting(true);
     try {
       await addDoc(collection(db, 'testimonials'), {
-        userId: user.uid,
-        displayName: user.displayName || 'Anonymous User',
-        photoURL: user.photoURL || null,
+        // userId: user.uid, // Removed for anonymity
+        displayName: 'Anonymous User', // Always anonymous
+        photoURL: null, // Always anonymous
         testimonialText: testimonialText.trim(),
         rating: parseInt(rating, 10),
         consentGiven: consentGiven,
@@ -64,7 +64,7 @@ export default function FeedbackPage() {
           <StarIcon className="h-8 w-8 sm:h-10 sm:w-10 text-primary mx-auto mb-2 sm:mb-3" />
           <CardTitle className="text-xl sm:text-2xl font-bold text-foreground">Share Your Experience</CardTitle>
           <CardDescription className="text-sm sm:text-md text-foreground/80">
-            We'd love to hear about your journey with ThoughtReflex! Your feedback helps us grow and inspire others.
+            We'd love to hear about your journey with ThoughtReflex! Your feedback helps us grow and inspire others. All submissions are anonymous.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 sm:p-6">
@@ -105,17 +105,17 @@ export default function FeedbackPage() {
                 onCheckedChange={(checked) => setConsentGiven(checked as boolean)}
               />
               <Label htmlFor="consentGiven" className="text-xs sm:text-sm font-normal text-foreground/80">
-                I agree to let ThoughtReflex use my testimonial (with my display name and avatar) publicly on the website and in other marketing materials.
+                I agree to let ThoughtReflex use my anonymous testimonial publicly on the website and in other marketing materials.
               </Label>
             </div>
             
             { !consentGiven && (
-                <p className="text-xs text-muted-foreground">If not checked, your testimonial will only be used internally for feedback.</p>
+                <p className="text-xs text-muted-foreground">If not checked, your anonymous testimonial will only be used internally for feedback.</p>
             )}
 
             <Button type="submit" className="w-full shadow-md text-sm sm:text-base" disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-              {isSubmitting ? 'Submitting...' : 'Submit Testimonial'}
+              {isSubmitting ? 'Submitting...' : 'Submit Anonymous Testimonial'}
             </Button>
           </form>
         </CardContent>
@@ -123,5 +123,3 @@ export default function FeedbackPage() {
     </div>
   );
 }
-
-    

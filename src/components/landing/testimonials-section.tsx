@@ -14,8 +14,8 @@ import { motion } from 'framer-motion';
 
 interface Testimonial {
   id: string;
-  displayName: string;
-  photoURL?: string | null;
+  displayName: string; // Will be "Anonymous User"
+  photoURL?: string | null; // Will be null
   testimonialText: string;
   rating: number;
   createdAt: Timestamp | Date; 
@@ -36,7 +36,7 @@ const cardVariants = {
     opacity: 1,
     y: 0,
     transition: {
-      delay: i * 0.15,
+      delay: i * 0.1,
       duration: 0.5,
       ease: "easeOut"
     }
@@ -65,8 +65,8 @@ export function TestimonialsSection() {
           const data = doc.data();
           return {
             id: doc.id,
-            displayName: data.displayName,
-            photoURL: data.photoURL,
+            displayName: data.displayName || "Anonymous User", // Should always be "Anonymous User" from submission
+            photoURL: data.photoURL || null, // Should always be null from submission
             testimonialText: data.testimonialText,
             rating: data.rating,
             createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
@@ -89,7 +89,7 @@ export function TestimonialsSection() {
   }, [toast]);
 
   const getInitials = (name: string | null | undefined) => {
-    if (!name) return 'U';
+    if (!name || name === "Anonymous User") return 'A'; // Default for "Anonymous User" or truly null/undefined
     const names = name.split(' ');
     if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
     return (names[0][0] + names[names.length - 1][0]).toUpperCase();
