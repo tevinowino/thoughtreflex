@@ -32,9 +32,9 @@ interface Message {
   timestamp: Timestamp | Date; 
   avatar?: string | null;
   name: string;
-  suggestedGoalText?: string;
+  suggestedGoalText?: string | null;
   isGoalAdded?: boolean;
-  reframingData?: ReframeThoughtOutput;
+  reframingData?: ReframeThoughtOutput | null;
   isReframingSaved?: boolean;
 }
 
@@ -96,7 +96,7 @@ export default function JournalSessionPage() {
         if (docSnap.exists()) {
           const title = docSnap.data().title || `Session from ${(docSnap.data().createdAt.toDate() as Date).toLocaleDateString()}`;
           setSessionTitle(title);
-          setEditableSessionTitle(title);
+          setEditableSessionTitle(title); // Initialize editable title here
         } else {
           toast({ title: "Error", description: "Session not found.", variant: "destructive" });
           router.push('/journal');
@@ -234,7 +234,7 @@ export default function JournalSessionPage() {
       await handleStreakUpdate();
 
       let activeGoalText: string | undefined = undefined;
-      if (currentTherapistMode === 'Coach') {
+      if (currentTherapistMode === 'Coach' || currentTherapistMode === 'Therapist') { // Also pass for Therapist mode
           const goalsQuery = query(collection(db, 'users', user.uid, 'goals'), where('isCompleted', '==', false), orderBy('createdAt', 'desc'), limit(1));
           const goalsSnapshot = await getDocs(goalsQuery);
           if (!goalsSnapshot.empty) {
@@ -252,7 +252,7 @@ export default function JournalSessionPage() {
         mode: currentTherapistMode,
         goal: activeGoalText,
         messageHistory: historyForAI,
-        mbtiType: user?.mbtiType,
+        mbtiType: user?.mbtiType || null,
         userName: user.displayName || undefined,
       };
 
@@ -264,17 +264,17 @@ export default function JournalSessionPage() {
         timestamp: serverTimestamp(),
         name: 'Mira',
         avatar: '/logo-ai.png',
-        suggestedGoalText: aiResponse.suggestedGoalText,
+        suggestedGoalText: aiResponse.suggestedGoalText || null,
         isGoalAdded: false,
-        reframingData: aiResponse.reframingData,
+        reframingData: aiResponse.reframingData || null,
         isReframingSaved: false,
       };
       await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), aiMessageData);
 
-      await updateDoc(doc(db, 'users', user.uid, 'journalSessions', actualSessionId!), {
+      const sessionUpdateData: { lastUpdatedAt: any } = {
         lastUpdatedAt: serverTimestamp(),
-        ...(messages.length === 0 && { firstMessagePreview: userMessageText.substring(0, 100) }) 
-      });
+      };
+      await updateDoc(doc(db, 'users', user.uid, 'journalSessions', actualSessionId!), sessionUpdateData);
 
     } catch (error: any) {
       console.error("Error sending message or getting AI response:", error);
@@ -288,13 +288,21 @@ export default function JournalSessionPage() {
 
   const handleSaveSessionTitle = async () => {
     if (!currentDbSessionId || !user || !editableSessionTitle.trim()) {
-      toast({ title: "Error", description: "Cannot save empty title or session not found.", variant: "destructive" });
-      return;
+       // Allow saving if title is deliberately cleared to empty, but only if it's an existing session
+      if (currentDbSessionId && editableSessionTitle.trim() === '') {
+        // Proceed to save empty title
+      } else {
+        toast({ title: "Error", description: "Cannot save empty title for a new session or session not found.", variant: "destructive" });
+        return;
+      }
     }
     try {
       const sessionDocRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId);
-      await updateDoc(sessionDocRef, { title: editableSessionTitle.trim() });
-      setSessionTitle(editableSessionTitle.trim());
+      await updateDoc(sessionDocRef, { 
+        title: editableSessionTitle.trim(),
+        lastUpdatedAt: serverTimestamp() // Update lastUpdatedAt on title change as well
+      });
+      setSessionTitle(editableSessionTitle.trim()); // Update display title
       toast({ title: "Session Renamed", description: "The session title has been updated." });
       setIsSessionSettingsOpen(false);
     } catch (error) {
@@ -315,8 +323,8 @@ export default function JournalSessionPage() {
       
       const messagesSnapshot = await getDocs(messagesColRef);
       const batch = writeBatch(db);
-      messagesSnapshot.forEach(doc => {
-        batch.delete(doc.ref);
+      messagesSnapshot.forEach(docSnap => { // Renamed doc to docSnap to avoid conflict
+        batch.delete(docSnap.ref);
       });
       await batch.commit();
 
@@ -333,8 +341,8 @@ export default function JournalSessionPage() {
     }
   };
 
-  const handleAddSuggestedGoal = async (messageId: string, goalText: string) => {
-    if (!user || !currentDbSessionId) return;
+  const handleAddSuggestedGoal = async (messageId: string, goalText: string | null | undefined) => {
+    if (!user || !currentDbSessionId || !goalText) return;
     try {
       await addDoc(collection(db, 'users', user.uid, 'goals'), {
         text: goalText,
@@ -359,8 +367,8 @@ export default function JournalSessionPage() {
     }
   };
 
-  const handleSaveMindShift = async (messageId: string, reframingData: ReframeThoughtOutput) => {
-    if (!user || !currentDbSessionId) return;
+  const handleSaveMindShift = async (messageId: string, reframingData: ReframeThoughtOutput | null | undefined) => {
+    if (!user || !currentDbSessionId || !reframingData) return;
     try {
         await addDoc(collection(db, 'users', user.uid, 'mindShifts'), {
             ...reframingData,
@@ -390,7 +398,7 @@ export default function JournalSessionPage() {
     Friend: <Smile className="mr-2 h-4 w-4" />,
   };
 
-  const ChatBubble = ({ message, handleAddSuggestedGoal, handleSaveMindShift }) => {
+  const ChatBubble = ({ message, handleAddSuggestedGoal, handleSaveMindShift }: { message: Message, handleAddSuggestedGoal: Function, handleSaveMindShift: Function}) => {
     const isUserMessage = message.sender === 'user';
     const timestamp = message.timestamp instanceof Date 
       ? message.timestamp 
@@ -403,34 +411,45 @@ export default function JournalSessionPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
         className={cn(
-          "group flex items-start gap-2 sm:gap-3 max-w-[90%] xs:max-w-[85%] sm:max-w-[75%] my-4  ",
+          "group flex items-start gap-2 sm:gap-3 max-w-[90%] xs:max-w-[85%] sm:max-w-[75%] my-4", // Added my-4 for vertical spacing
           isUserMessage ? 'ml-auto flex-row-reverse' : 'mr-auto'
         )}
       >
-        <Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0 shadow-sm border-2 border-background"> 
-          <AvatarImage src={message.avatar || undefined} alt={isUserMessage ? "User" : "Assistant"} />
+        <Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0 shadow-md border-2 border-background"> 
+          <AvatarImage src={message.avatar || undefined} alt={isUserMessage ? (user?.displayName || "User") : "Mira"} />
           <AvatarFallback className={cn(
+            "text-xs",
             isUserMessage 
               ? 'bg-secondary text-secondary-foreground' 
-              : 'bg-primary/20 text-primary text-xs'
+              : 'bg-primary/20 text-primary'
           )}>
             {isUserMessage 
-              ? <User className="h-4 w-4 sm:h-5 sm:w-5" /> 
+              ? (user?.displayName?.substring(0,1) || <User className="h-4 w-4 sm:h-5 sm:w-5" /> )
               : <Brain className="h-4 w-4 sm:h-5 sm:w-5" />
             }
           </AvatarFallback>
         </Avatar>
         
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 w-full">
           <div
             className={cn(
-              "px-3 py-2 sm:px-4 sm:py-3 rounded-2xl shadow-md group-hover:shadow-lg transition-shadow duration-200 ease-in-out text-sm", 
+              "px-3 py-2 sm:px-4 sm:py-3 rounded-2xl shadow-md group-hover:shadow-xl transition-shadow duration-200 ease-in-out text-sm", 
               isUserMessage
                 ? 'bg-primary text-primary-foreground rounded-br-none'
                 : 'bg-muted text-foreground rounded-bl-none'
             )}
           >
-            <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
+             {message.imageDataUri ? (
+              <Image 
+                src={message.imageDataUri} 
+                alt="AI generated visual prompt" 
+                width={300} 
+                height={300} 
+                className="rounded-lg object-contain max-w-full h-auto my-2" 
+              />
+            ) : (
+              <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
+            )}
             <p className={cn(
               "text-[10px] sm:text-[11px] mt-1.5 sm:mt-2 opacity-50 group-hover:opacity-100 transition-opacity duration-300", 
               isUserMessage ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground text-left'
@@ -445,10 +464,10 @@ export default function JournalSessionPage() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               transition={{ duration: 0.3, delay: 0.2, ease: "easeOut" }}
-              className="mt-1 sm:mt-2 pt-2 sm:pt-3 border border-primary/20 bg-accent/10 p-2.5 sm:p-3 rounded-xl shadow-sm"
+              className="mt-2 pt-2 sm:pt-3 border border-primary/30 bg-accent/20 p-2.5 sm:p-3 rounded-xl shadow-sm"
             >
-              <p className="text-xs font-semibold text-primary/90 mb-1 sm:mb-1.5">Mira's Goal Suggestion:</p>
-              <p className="text-xs sm:text-sm text-foreground/90 italic mb-1.5 sm:mb-2">"{message.suggestedGoalText}"</p>
+              <p className="text-xs font-semibold text-primary/90 mb-1.5">Mira's Goal Suggestion:</p>
+              <p className="text-xs sm:text-sm text-foreground/90 italic mb-2">"{message.suggestedGoalText}"</p>
               {!message.isGoalAdded ? (
                 <Button
                   size="sm"
@@ -472,7 +491,7 @@ export default function JournalSessionPage() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               transition={{ duration: 0.3, delay: 0.2, ease: "easeOut" }}
-              className="mt-1 sm:mt-2 pt-2 sm:pt-3 border border-purple-500/20 bg-purple-500/10 dark:bg-purple-600/20 p-2.5 sm:p-3 rounded-xl shadow-sm"
+              className="mt-2 pt-2 sm:pt-3 border border-purple-500/30 bg-purple-500/10 dark:bg-purple-600/20 p-2.5 sm:p-3 rounded-xl shadow-sm"
             >
               <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mb-1.5">Mira's Mind Shift Suggestion:</p>
               {!message.isReframingSaved ? (
@@ -506,7 +525,7 @@ export default function JournalSessionPage() {
   }
 
   return (
-    <Card className="flex flex-col h-[calc(100vh-4rem)] sm:h-[calc(100vh-3rem)] bg-card rounded-lg sm:rounded-xl lg:rounded-2xl shadow-lg sm:shadow-xl overflow-hidden border">
+    <Card className="flex flex-col h-[calc(100vh-4rem)] sm:h-[calc(100vh-3rem)] bg-card rounded-lg sm:rounded-xl lg:rounded-2xl shadow-xl overflow-hidden border">
       {/* Header Section */}
       <CardHeader className="flex flex-row items-center justify-between p-2 xs:p-3 sm:p-4 border-b bg-muted/30 gap-2">
         <div className="flex items-center gap-1 sm:gap-2 min-w-0 overflow-hidden">
@@ -523,7 +542,7 @@ export default function JournalSessionPage() {
         
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Therapist Mode Selector */}
-          <Select value={currentTherapistMode} onValueChange={(value) => setCurrentTherapistMode(value)}>
+          <Select value={currentTherapistMode} onValueChange={(value: TherapistMode) => setCurrentTherapistMode(value)}>
             <SelectTrigger className="w-[100px] xs:w-[110px] sm:w-[150px] h-8 sm:h-9 text-xs sm:text-sm shadow-sm">
               <div className="flex items-center">
                 <SelectValue placeholder="Select Mode" />
@@ -568,7 +587,7 @@ export default function JournalSessionPage() {
             <DialogContent className="sm:max-w-md rounded-lg">
               <DialogHeader>
                 <DialogTitle className="text-xl">Session Settings</DialogTitle>
-                <DialogDescription>Rename your journal session or delete it permanently.</DialogDescription>
+                <DialogDescription>Rename or delete this journal session.</DialogDescription>
               </DialogHeader>
               <div className="py-4 space-y-4">
                 <Label htmlFor="sessionTitleInput" className="text-sm font-medium">Session Title</Label>
@@ -580,10 +599,10 @@ export default function JournalSessionPage() {
                   className="bg-muted/50"
                 />
               </div>
-              <DialogFooter className="flex gap-2 flex-col xs:flex-row xs:justify-between pt-4">
+              <DialogFooter className="flex gap-2 flex-col xs:flex-row justify-between items-center pt-4">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive" className="w-full xs:w-auto" disabled={isDeletingSession}>
+                    <Button variant="destructive" className="w-full xs:w-auto" disabled={isDeletingSession || !currentDbSessionId}>
                       {isDeletingSession ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : (
@@ -596,7 +615,7 @@ export default function JournalSessionPage() {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This will permanently delete this journal session and all its messages. This action cannot be undone.
+                        This will permanently delete the journal session titled "{sessionTitle}" and all its messages. This action cannot be undone.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -626,6 +645,7 @@ export default function JournalSessionPage() {
                   <Button 
                     onClick={handleSaveSessionTitle} 
                     className="shadow-sm flex-1 xs:flex-none"
+                    disabled={!currentDbSessionId}
                   >
                     Save Title
                   </Button>
@@ -638,7 +658,7 @@ export default function JournalSessionPage() {
 
       {/* Chat Messages Area */}
       <ScrollArea className="flex-1" viewportRef={viewportRef} ref={scrollAreaRef}>
-        <div className="p-3 xs:p-4 space-y-0">
+        <div className="p-3 xs:p-4">
           {messages.map((message) => (
             <ChatBubble 
               key={message.id}
@@ -653,30 +673,31 @@ export default function JournalSessionPage() {
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex items-start gap-2 sm:gap-3 mr-auto mb-4"
+              className="flex items-start gap-2 sm:gap-3 mr-auto my-4" // Added my-4 for vertical spacing
             >
               <Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0 shadow-sm border-2 border-background">
                 <AvatarImage src="/logo-ai.png" alt="Mira AI" />
-                <AvatarFallback className="bg-muted text-primary">
+                <AvatarFallback className="bg-muted text-primary text-xs">
                   <Brain className="h-4 w-4 sm:h-5 sm:w-5 animate-pulse" />
                 </AvatarFallback>
               </Avatar>
               <div className="px-3 py-2 sm:px-4 sm:py-3 rounded-2xl rounded-bl-none shadow-md bg-muted text-foreground flex items-center">
-                <div className="flex gap-1 items-center">
+                <p className="text-sm italic text-muted-foreground">Mira is typing</p>
+                <div className="flex gap-0.5 items-center ml-1.5">
                   <motion.span
                     animate={{ opacity: [0.4, 1, 0.4] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                    className="h-2 w-2 bg-primary/60 rounded-full"
+                    transition={{ duration: 1.2, repeat: Infinity, delay: 0 }}
+                    className="h-1.5 w-1.5 bg-primary/60 rounded-full"
                   />
                   <motion.span
                     animate={{ opacity: [0.4, 1, 0.4] }}
-                    transition={{ duration: 1.5, repeat: Infinity, delay: 0.2 }}
-                    className="h-2 w-2 bg-primary/60 rounded-full"
+                    transition={{ duration: 1.2, repeat: Infinity, delay: 0.2 }}
+                    className="h-1.5 w-1.5 bg-primary/60 rounded-full"
                   />
                   <motion.span
                     animate={{ opacity: [0.4, 1, 0.4] }}
-                    transition={{ duration: 1.5, repeat: Infinity, delay: 0.4 }}
-                    className="h-2 w-2 bg-primary/60 rounded-full"
+                    transition={{ duration: 1.2, repeat: Infinity, delay: 0.4 }}
+                    className="h-1.5 w-1.5 bg-primary/60 rounded-full"
                   />
                 </div>
               </div>
@@ -692,7 +713,7 @@ export default function JournalSessionPage() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Share your thoughts here..."
-            className="pr-16 xs:pr-20 sm:pr-24 resize-none min-h-[48px] xs:min-h-[50px] sm:min-h-[56px] max-h-[120px] xs:max-h-[140px] sm:max-h-[160px] rounded-lg sm:rounded-xl text-sm sm:text-base border-input focus:border-primary shadow-sm"
+            className="pr-20 xs:pr-24 sm:pr-28 resize-none min-h-[48px] xs:min-h-[50px] sm:min-h-[56px] max-h-[120px] xs:max-h-[140px] sm:max-h-[160px] rounded-lg sm:rounded-xl text-sm sm:text-base border-input focus:border-primary shadow-sm"
             rows={1}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -702,6 +723,7 @@ export default function JournalSessionPage() {
             }}
           />
           <div className="absolute right-1 xs:right-1.5 sm:right-2 top-1/2 -translate-y-1/2 flex gap-0.5 sm:gap-1">
+            {/* Removed ImageIcon button based on previous correction to avoid feature creep for now */}
             <Button 
               type="button" 
               variant="ghost" 
