@@ -27,7 +27,7 @@ const TherapistModeInputSchema = z.object({
   weeklyRecap: z.string().optional().describe('A reflection of the user’s recent week, to guide response context.'),
   goal: z.string().optional().describe('A personal goal the user is working on.'),
   messageHistory: z.array(AiChatMessageSchema).optional().describe('Previous conversation context from the current session.'),
-  mbtiType: z.string().optional().describe("The user's Myers-Briggs personality type, if known (e.g., 'INFJ')."),
+  mbtiType: z.string().optional().nullable().describe("The user's Myers-Briggs personality type, if known (e.g., 'INFJ'). Can be null."),
   userName: z.string().optional().describe("The user's display name, if available."),
 });
 export type TherapistModeInput = z.infer<typeof TherapistModeInputSchema>;
@@ -37,11 +37,11 @@ const TherapistModeOutputSchema = z.object({
   suggestedGoalText: z
     .string()
     .optional()
-    .nullable() // Allow null
+    .nullable() 
     .describe('Optional goal suggested to help user make progress. Should be concise and actionable, starting with a verb (e.g., "Practice deep breathing for 5 minutes", "Write down one positive thing that happened today").'),
   reframingData: ReframeThoughtOutputSchema
     .optional()
-    .nullable() // Allow null
+    .nullable() 
     .describe("Structured data from a thought reframing attempt, if the user requested it and the tool was used.")
 });
 export type TherapistModeOutput = z.infer<typeof TherapistModeOutputSchema>;
@@ -177,7 +177,7 @@ const TherapistModePromptInternalInputSchema = z.object({
   goal: z.string().optional(),
   activeModeInstruction: z.string(),
   messageHistory: z.array(AiChatMessageSchema).optional(),
-  mbtiType: z.string().optional(),
+  mbtiType: z.string().optional().nullable(),
   userName: z.string().optional(),
 });
 
@@ -278,3 +278,4 @@ export async function getTherapistResponse(
 
 
 export { ReframeThoughtOutput };
+
