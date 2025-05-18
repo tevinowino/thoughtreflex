@@ -82,7 +82,7 @@ export function AppHeader() {
                   {currentStreak > 0 && (
                     <span
                       className={cn(
-                        "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[55%] text-[9px] sm:text-[10px] font-bold text-white",
+                        "absolute top-1/2 left-2 -translate-x-1/2 -translate-y-[55%] text-[9px] sm:text-[10px] font-bold text-white",
                         "drop-shadow-[0_0.8px_0.8px_rgba(0,0,0,0.6)] dark:drop-shadow-[0_0.8px_0.8px_rgba(0,0,0,0.9)]" // Text shadow for legibility
                       )}
                       // To ensure text is readable, consider a background for the number if shadow isn't enough.
