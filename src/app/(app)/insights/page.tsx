@@ -4,7 +4,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Brain, Activity, TrendingUp, Lightbulb, Loader2, AlertTriangle, Sparkles } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
@@ -34,6 +34,20 @@ interface SuggestionData {
   suggestion: string;
   affirmation?: string;
 }
+
+// Define distinct colors for chart segments if not relying solely on globals.css
+const COLORS = {
+  positive: 'hsl(var(--chart-1))', // Ocean Teal
+  negative: 'hsl(var(--chart-2))', // Soft Lavender (could be more reddish for negative)
+  neutral: 'hsl(var(--chart-3))',  // Peach Blush (could be more greyish for neutral)
+};
+// Alternative, more standard sentiment colors
+const SENTIMENT_COLORS = {
+  positive: '#82ca9d', // A pleasant green
+  negative: '#ff6b6b', // A clear red
+  neutral: '#a0a0a0',  // A neutral grey
+};
+
 
 export default function InsightsPage() {
   const { user } = useAuth();
@@ -85,7 +99,7 @@ export default function InsightsPage() {
     );
     const recapsSnapshot = await getDocs(recapsQuery);
     return recapsSnapshot.docs.map(doc => {
-      const data = doc.data() as WeeklyRecap; // Assuming WeeklyRecap has id, title, summary
+      const data = doc.data() as WeeklyRecap; 
       return { id: doc.id, title: data.title, summary: data.summary };
     }).reverse(); // Reverse to get chronological order for trends
   };
@@ -102,8 +116,8 @@ export default function InsightsPage() {
 
     try {
       const [journalText, weeklyRecapsData] = await Promise.all([
-        fetchJournalEntriesText(30), // Process last 30 days of journals
-        fetchWeeklyRecaps(4)       // Process last 4 weekly recaps for trends
+        fetchJournalEntriesText(30), 
+        fetchWeeklyRecaps(4)       
       ]);
 
       if (!journalText && weeklyRecapsData.length === 0) {
@@ -118,7 +132,7 @@ export default function InsightsPage() {
         const emotionOutput = await analyzeWeeklySentiments(emotionInput);
         setEmotionTrends(emotionOutput.trends.map(t => ({ name: t.weekName, positive: t.positive, negative: t.negative, neutral: t.neutral })));
       } else {
-        setEmotionTrends([]); // Clear if no recaps
+        setEmotionTrends([]); 
       }
 
       // Generate Recurring Themes
@@ -150,6 +164,23 @@ export default function InsightsPage() {
       setIsLoading(false);
     }
   };
+  
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="rounded-xl border bg-background p-3 text-sm shadow-lg outline-none animate-in fade-in-0 zoom-in-95">
+          <p className="font-semibold mb-1">{`${label}`}</p>
+          {payload.map((entry: any, index: number) => (
+            <p key={`item-${index}`} style={{ color: entry.color || entry.fill }}>
+              {`${entry.name}: ${entry.value.toFixed(1)}`}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
 
   return (
     <div className="space-y-8">
@@ -213,20 +244,20 @@ export default function InsightsPage() {
           <Card className="shadow-lg rounded-2xl">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Activity className="h-6 w-6 text-primary" /> Emotion Trends Over Time</CardTitle>
-              <CardDescription>Visualizing sentiments from your recent weekly recaps.</CardDescription>
+              <CardDescription>Visualizing sentiments from your recent weekly recaps (Scores 0-10).</CardDescription>
             </CardHeader>
             <CardContent>
               {emotionTrends.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={emotionTrends}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip wrapperClassName="rounded-lg border bg-popover p-2 text-sm shadow-md outline-none animate-in fade-in-0 zoom-in-95" />
-                    <Legend />
-                    <Bar dataKey="positive" fill="var(--chart-1)" name="Positive" />
-                    <Bar dataKey="negative" fill="var(--chart-2)" name="Negative"/>
-                    <Bar dataKey="neutral" fill="var(--chart-3)" name="Neutral"/>
+                <ResponsiveContainer width="100%" height={350}>
+                  <BarChart data={emotionTrends} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.5} />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 12 }} domain={[0, 10]} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--muted))', fillOpacity: 0.5 }} />
+                    <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
+                    <Bar dataKey="positive" name="Positive" fill={SENTIMENT_COLORS.positive} radius={[4, 4, 0, 0]} barSize={20} />
+                    <Bar dataKey="negative" name="Negative" fill={SENTIMENT_COLORS.negative} radius={[4, 4, 0, 0]} barSize={20} />
+                    <Bar dataKey="neutral" name="Neutral" fill={SENTIMENT_COLORS.neutral} radius={[4, 4, 0, 0]} barSize={20} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -245,9 +276,9 @@ export default function InsightsPage() {
                 {recurringThemes.length > 0 ? (
                   <ul className="space-y-3">
                     {recurringThemes.map(themeObj => (
-                      <li key={themeObj.theme} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                      <li key={themeObj.theme} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors">
                         <span className="text-sm font-medium text-foreground">{themeObj.theme}</span>
-                        <span className="text-xs text-foreground/80 block">{themeObj.mentions} mentions</span>
+                        <span className="text-xs text-foreground/80 block bg-primary/10 text-primary px-2 py-0.5 rounded-full">{themeObj.mentions} mentions</span>
                       </li>
                     ))}
                   </ul>
@@ -262,22 +293,22 @@ export default function InsightsPage() {
                 <CardTitle className="flex items-center gap-2"><Lightbulb className="h-6 w-6 text-primary" /> Key Insights & Suggestions</CardTitle>
                 <CardDescription>Personalized observations based on your journaling.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-4">
                 {personalizedSuggestions.length > 0 ? (
                   personalizedSuggestions.map((sugg, index) => (
-                    <div key={index} className="space-y-3">
-                      <div className="p-3 bg-accent/20 rounded-lg">
-                        <p className="text-sm font-semibold text-accent-foreground">Observation:</p>
+                    <div key={index} className="space-y-3 border-l-4 border-primary/50 pl-4 py-2 bg-primary/5 rounded-r-lg">
+                      <div>
+                        <p className="text-sm font-semibold text-primary/90">Observation:</p>
                         <p className="text-sm text-foreground/90">{sugg.observation}</p>
                       </div>
-                      <div className="p-3 bg-secondary/20 rounded-lg">
-                        <p className="text-sm font-semibold text-secondary-foreground">Suggestion:</p>
+                      <div>
+                        <p className="text-sm font-semibold text-primary/90">Suggestion:</p>
                         <p className="text-sm text-foreground/90">{sugg.suggestion}</p>
                       </div>
                       {sugg.affirmation && (
-                        <div className="p-3 bg-muted/50 rounded-lg">
-                          <p className="text-sm font-semibold text-foreground">Affirmation:</p>
-                          <p className="text-sm text-foreground/90">{sugg.affirmation}</p>
+                        <div>
+                          <p className="text-sm font-semibold text-primary/90">Affirmation:</p>
+                          <p className="text-sm text-foreground/90 italic">"{sugg.affirmation}"</p>
                         </div>
                       )}
                     </div>
