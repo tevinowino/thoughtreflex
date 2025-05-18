@@ -8,7 +8,9 @@ import '@/ai/flows/therapist-modes.ts';
 import '@/ai/flows/analyze-weekly-sentiments-flow.ts';
 import '@/ai/flows/identify-journal-themes-flow.ts';
 import '@/ai/flows/generate-personalized-suggestions-flow.ts';
-import '@/ai/core/reframe-thought-logic.ts'; // Not a flow, but ensure it's part of build if referenced elsewhere.
+import '@/ai/core/reframe-thought-logic.ts'; 
 import '@/ai/flows/reframe-thought-flow.ts';
-import '@/ai/flows/generate-affirmation-flow.ts'; // Added new flow
+import '@/ai/core/affirmation-schemas.ts'; // Ensure core schemas are part of the context
+import '@/ai/flows/generate-affirmation-flow.ts';
+
 

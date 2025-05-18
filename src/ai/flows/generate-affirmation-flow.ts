@@ -8,15 +8,9 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {z} from 'genkit'; // Keep z for inferring the type locally
+import { GenerateDailyAffirmationOutputSchema } from '@/ai/core/affirmation-schemas';
 
-// No specific input needed for a general daily affirmation for now
-// export const GenerateDailyAffirmationInputSchema = z.object({});
-// export type GenerateDailyAffirmationInput = z.infer<typeof GenerateDailyAffirmationInputSchema>;
-
-export const GenerateDailyAffirmationOutputSchema = z.object({
-  affirmation: z.string().describe("A short, uplifting, and reassuring daily affirmation (1-2 sentences)."),
-});
 export type GenerateDailyAffirmationOutput = z.infer<typeof GenerateDailyAffirmationOutputSchema>;
 
 export async function generateDailyAffirmation(): Promise<GenerateDailyAffirmationOutput> {
@@ -25,9 +19,8 @@ export async function generateDailyAffirmation(): Promise<GenerateDailyAffirmati
 
 const prompt = ai.definePrompt({
   name: 'generateDailyAffirmationPrompt',
-  // input: {schema: GenerateDailyAffirmationInputSchema}, // No input schema needed for now
-  output: {schema: GenerateDailyAffirmationOutputSchema},
-  prompt: `You are Mira, an empathetic AI companion. 
+  output: {schema: GenerateDailyAffirmationOutputSchema}, // Use the imported schema
+  prompt: `You are Mira, an empathetic AI companion.
 Please generate a short, uplifting, and reassuring daily affirmation (1-2 sentences).
 The affirmation should:
 - Remind the user of their inner strength or inherent worth.
@@ -45,15 +38,13 @@ Focus on a positive and forward-looking message.
 const generateDailyAffirmationFlow = ai.defineFlow(
   {
     name: 'generateDailyAffirmationFlow',
-    // inputSchema: GenerateDailyAffirmationInputSchema, // No input schema
-    outputSchema: GenerateDailyAffirmationOutputSchema,
+    outputSchema: GenerateDailyAffirmationOutputSchema, // Use the imported schema
   },
   async () => {
-    const {output} = await prompt({}); // Pass empty object as input if no schema defined
+    const {output} = await prompt({});
     if (!output || !output.affirmation) {
       return { affirmation: "Remember to be kind to yourself today. You're doing great." }; // Fallback
     }
     return output;
   }
 );
-
