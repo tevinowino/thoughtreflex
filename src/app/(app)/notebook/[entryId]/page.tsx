@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils';
 const formatTimestamp = (date: Date | undefined | null, savingState?: string): string => {
   if (savingState) return savingState;
   if (!date) return "Not yet saved";
-  return `Last saved: ${date.toLocaleDateString()} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  return `Last saved: ${date.toLocaleDateString([], { hour: 'numeric', minute: '2-digit', hour12: true })}`;
 };
 
 
@@ -33,11 +33,11 @@ export default function NotebookEntryPage() {
   const { user, loading: authLoading } = useAuth();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [initialTitle, setInitialTitle] = useState(''); // For autosave
-  const [initialContent, setInitialContent] = useState(''); // For autosave
+  const [initialTitle, setInitialTitle] = useState('');
+  const [initialContent, setInitialContent] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false); // For manual save
-  const [isAutosaving, setIsAutosaving] = useState(false); // For autosave indicator
+  const [isSaving, setIsSaving] = useState(false);
+  const [isAutosaving, setIsAutosaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [currentEntryId, setCurrentEntryId] = useState(entryIdParams === 'new' ? null : entryIdParams);
   const [lastSavedDisplay, setLastSavedDisplay] = useState<string>("Not yet saved");
@@ -52,14 +52,15 @@ export default function NotebookEntryPage() {
       return;
     }
 
-    if (currentEntryId === null) { 
+    if (entryIdParams === 'new') { 
       setTitle('');
       setContent('');
       setInitialTitle('');
       setInitialContent('');
       setLastSavedDisplay("Start typing to autosave...");
+      setCurrentEntryId(null); // Explicitly set currentEntryId to null for new entries
       setIsLoading(false);
-    } else {
+    } else if (currentEntryId && currentEntryId !== 'new') { // Ensure currentEntryId is not 'new' before fetching
       setIsLoading(true);
       const entryDocRef = doc(db, 'users', user.uid, 'notebookEntries', currentEntryId);
       getDoc(entryDocRef).then(docSnap => {
@@ -83,25 +84,44 @@ export default function NotebookEntryPage() {
         setIsLoading(false);
         router.push('/notebook');
       });
+    } else {
+      // Handles the case where entryIdParams might be 'new' but currentEntryId is already null
+      // or some other edge case.
+      setIsLoading(false);
+      setLastSavedDisplay("Start typing to autosave...");
     }
-  }, [currentEntryId, user, authLoading, router, toast]);
+  }, [currentEntryId, user, authLoading, router, toast, entryIdParams]);
+
 
   const performSave = useCallback(async (isManualSave = false) => {
     if (!user) return;
-    if (!title.trim() && !content.trim()) {
-      if (isManualSave) { // Only toast for manual save of empty entry
-         toast({ title: "Cannot Save Empty Entry", description: "Please add a title or some content.", variant: "destructive" });
+
+    const trimmedTitle = title.trim();
+    const finalTitle = trimmedTitle || 'Untitled Entry'; // Default to 'Untitled Entry' if title is blank
+    const isCompletelyBlank = !trimmedTitle && !content.trim();
+
+
+    // Prevent saving a NEW entry that is completely blank
+    if (currentEntryId === null && isCompletelyBlank) {
+      if (isManualSave) {
+        toast({
+          title: "Cannot Save Empty New Entry",
+          description: "Please add a title or some content.",
+          variant: "destructive",
+        });
       }
+      // For both manual and autosave, if it's a new blank entry, reset states and bail.
+      setLastSavedDisplay("Start typing to save");
+      if (!isManualSave) setIsAutosaving(false); else setIsSaving(false);
       return;
     }
 
     if (!isManualSave) setIsAutosaving(true); else setIsSaving(true);
-    
     setLastSavedDisplay("Saving...");
 
-    const entryData = {
-      title: title.trim() || (currentEntryId ? 'Untitled Entry' : ''), // Keep untitled if existing & title cleared
-      content: content,
+    const entryData: any = {
+      title: finalTitle,
+      content: content, // Save content as is, including leading/trailing spaces if user typed them
       userId: user.uid,
       lastUpdatedAt: serverTimestamp(),
     };
@@ -109,13 +129,11 @@ export default function NotebookEntryPage() {
     try {
       let entryIdToUpdate = currentEntryId;
       if (entryIdToUpdate === null) { 
-        const newEntryRef = await addDoc(collection(db, 'users', user.uid, 'notebookEntries'), {
-          ...entryData,
-          createdAt: serverTimestamp(),
-        });
+        entryData.createdAt = serverTimestamp();
+        const newEntryRef = await addDoc(collection(db, 'users', user.uid, 'notebookEntries'), entryData);
         setCurrentEntryId(newEntryRef.id); 
         entryIdToUpdate = newEntryRef.id;
-        if (entryIdParams === 'new') { // Only replace URL if we were on the 'new' page
+        if (entryIdParams === 'new') {
             router.replace(`/notebook/${newEntryRef.id}`, { scroll: false });
         }
         if (isManualSave) toast({ title: "Entry Saved", description: "Your new notebook entry has been saved." });
@@ -124,9 +142,9 @@ export default function NotebookEntryPage() {
         await updateDoc(entryDocRef, entryData);
         if (isManualSave) toast({ title: "Entry Updated", description: "Your notebook entry has been updated." });
       }
-      setInitialTitle(entryData.title); // Update initial state after successful save
-      setInitialContent(entryData.content);
-      setLastSavedDisplay(`Last saved: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+      setInitialTitle(finalTitle); 
+      setInitialContent(content); // Store the raw content
+      setLastSavedDisplay(`Last saved: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}`);
     } catch (error) {
       console.error("Error saving entry:", error);
       toast({ title: "Save Failed", description: "Could not save notebook entry.", variant: "destructive" });
@@ -143,23 +161,23 @@ export default function NotebookEntryPage() {
   }
 
   useEffect(() => {
-    if (isLoading || authLoading || !user) return; // Don't autosave while loading or if not logged in
+    if (isLoading || authLoading || !user || isSaving) return;
 
-    // Only trigger autosave if content has actually changed from initial or if it's a new entry with content
     const hasChanged = title !== initialTitle || content !== initialContent;
-    const isNewAndNotEmpty = currentEntryId === null && (title.trim() !== '' || content.trim() !== '');
-
-    if (hasChanged || isNewAndNotEmpty) {
+    
+    // Only autosave if there are actual changes
+    if (hasChanged) {
       if (debounceTimeoutRef.current) {
         clearTimeout(debounceTimeoutRef.current);
       }
-      if (title.trim() === '' && content.trim() === '' && currentEntryId === null) {
-         // Don't autosave if it's a new entry and still completely blank
+      // Don't autosave if it's a new entry and still completely blank
+      if (currentEntryId === null && !title.trim() && !content.trim()) {
+        setLastSavedDisplay("Start typing to save");
       } else {
         setLastSavedDisplay("Unsaved changes...");
         debounceTimeoutRef.current = setTimeout(() => {
-          performSave(false);
-        }, 2500); // 2.5-second delay for autosave
+          performSave(false); // Autosave
+        }, 2500); 
       }
     }
 
@@ -168,7 +186,7 @@ export default function NotebookEntryPage() {
         clearTimeout(debounceTimeoutRef.current);
       }
     };
-  }, [title, content, isLoading, initialTitle, initialContent, currentEntryId, performSave, authLoading, user]);
+  }, [title, content, isLoading, initialTitle, initialContent, currentEntryId, performSave, authLoading, user, isSaving]);
 
 
   const handleDeleteEntry = async () => {
@@ -191,13 +209,16 @@ export default function NotebookEntryPage() {
     setTitle('');
     setContent('');
     setIsClearConfirmationOpen(false);
-    toast({ title: "Entry Cleared", description: "Content has been cleared. Changes will be autosaved."});
+    // "Unsaved changes..." will appear due to useEffect triggering, then autosave will handle it.
+    // If it's an existing entry, autosave will save the cleared state (with 'Untitled Entry' as title).
+    // If it's a new, never-saved entry, autosave won't save the blank state.
+    toast({ title: "Entry Cleared", description: "Content has been cleared."});
   };
 
   const wordCount = useMemo(() => content.trim() === '' ? 0 : content.trim().split(/\s+/).length, [content]);
   const charCount = useMemo(() => content.length, [content]);
 
-  if (authLoading || (isLoading && entryIdParams !== 'new')) {
+  if (authLoading || (isLoading && entryIdParams !== 'new' && currentEntryId !== null)) {
     return (
       <div className="flex justify-center items-center h-[calc(100vh-theme(spacing.32))] md:h-[calc(100vh-theme(spacing.24))]">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -246,7 +267,7 @@ export default function NotebookEntryPage() {
                     </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
-                    <AlertDialogHeader><AlertDialogTitle>Clear Entry?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to clear the title and content of this entry? Changes will be autosaved.</AlertDialogDescription></AlertDialogHeader>
+                    <AlertDialogHeader><AlertDialogTitle>Clear Entry?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to clear the title and content of this entry? Changes will be saved.</AlertDialogDescription></AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction onClick={handleClearEntry}>Yes, Clear</AlertDialogAction>
@@ -298,3 +319,6 @@ export default function NotebookEntryPage() {
     </form>
   );
 }
+
+
+    
