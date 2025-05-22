@@ -10,18 +10,12 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import { 
+    GenerateCheckinPromptInputSchema, 
+    GenerateCheckinPromptOutputSchema 
+} from '@/ai/core/checkin-prompt-schemas';
 
-export const GenerateCheckinPromptInputSchema = z.object({
-  userName: z.string().optional().describe("The user's display name, if available."),
-  userActiveGoal: z.string().optional().describe("The user's current primary active goal, if set."),
-  userMbtiType: z.string().optional().describe("The user's MBTI personality type, if recorded."),
-  daysSinceLastEntry: z.number().optional().describe("Number of days since the user's last journal entry. 0 if today, 1 if yesterday, etc. Can be undefined if no prior entries."),
-});
 export type GenerateCheckinPromptInput = z.infer<typeof GenerateCheckinPromptInputSchema>;
-
-export const GenerateCheckinPromptOutputSchema = z.object({
-  checkInPrompt: z.string().describe("A personalized and thoughtful opening prompt for a new journal session from Mira."),
-});
 export type GenerateCheckinPromptOutput = z.infer<typeof GenerateCheckinPromptOutputSchema>;
 
 export async function generateCheckinPrompt(input: GenerateCheckinPromptInput): Promise<GenerateCheckinPromptOutput> {
@@ -77,4 +71,3 @@ const generateCheckinPromptFlow = ai.defineFlow(
     return output;
   }
 );
-

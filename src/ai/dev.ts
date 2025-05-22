@@ -12,6 +12,7 @@ import '@/ai/core/reframe-thought-logic.ts';
 import '@/ai/flows/reframe-thought-flow.ts';
 import '@/ai/core/affirmation-schemas.ts'; 
 import '@/ai/flows/generate-affirmation-flow.ts';
+import '@/ai/core/checkin-prompt-schemas.ts';
 import '@/ai/flows/generate-checkin-prompt-flow.ts';
 
 
