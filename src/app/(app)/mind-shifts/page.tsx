@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { useAuth } from '@/contexts/auth-context';
 import { db } from '@/lib/firebase';
 import { collection, query, orderBy, onSnapshot, doc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { Loader2, Trash2, Lightbulb, Sparkles, CheckCircle, Brain, Zap, Smile } from 'lucide-react';
+import { Loader2, Trash2, Lightbulb, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -21,7 +21,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { cn } from '@/lib/utils';
-import type { ReframeThoughtOutput } from '@/ai/flows/reframe-thought-flow';
+import type { ReframeThoughtOutput } from '@/ai/core/reframe-thought-logic'; // Adjusted path
 
 interface SavedMindShift extends ReframeThoughtOutput {
   id: string;
@@ -193,4 +193,3 @@ export default function MindShiftsPage() {
     </div>
   );
 }
-
