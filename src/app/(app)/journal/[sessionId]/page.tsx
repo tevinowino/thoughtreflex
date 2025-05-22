@@ -7,7 +7,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, ImageIcon, Save } from 'lucide-react';
+import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, Save } from 'lucide-react';
 import { useAuth, UserProfile } from '@/contexts/auth-context'; 
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -17,12 +17,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { cn } from '@/lib/utils';
 import { getTherapistResponse, TherapistModeInput, AiChatMessage, ReframeThoughtOutput } from '@/ai/flows/therapist-modes';
+import { generateCheckinPrompt, GenerateCheckinPromptInput } from '@/ai/flows/generate-checkin-prompt-flow';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, addDoc, collection, query, orderBy, onSnapshot, serverTimestamp, Timestamp, setDoc, where, getDocs, limit, deleteDoc, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Label } from '@/components/ui/label';
+import { differenceInDays } from 'date-fns';
 
 
 interface Message {
@@ -75,18 +77,52 @@ export default function JournalSessionPage() {
     }
   }, [user?.defaultTherapistMode]);
 
+  // Fetch session data and messages
   useEffect(() => {
     if (!user || authLoading) return;
 
-    if (initialSessionId === 'new') {
+    const initializeNewSession = async () => {
       const newTitle = `New Journal - ${new Date().toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
       setSessionTitle(newTitle);
       setEditableSessionTitle(newTitle);
-      setMessages([
-        { id: '0', text: "Welcome! I'm Mira. I'm here to listen, and please know this space is private and confidential. What's on your mind today?", sender: 'ai', timestamp: new Date(), name: 'Mira', avatar: '/logo-ai.png' },
-      ]);
-      setIsLoadingSession(false);
-      setCurrentDbSessionId(null); 
+      setIsLoadingSession(true); // Set loading while fetching AI prompt
+
+      try {
+        let daysSinceLastEntry: number | undefined = undefined;
+        if (user.lastJournalDate) {
+          daysSinceLastEntry = differenceInDays(new Date(), new Date(user.lastJournalDate));
+        }
+
+        let activeGoalText: string | undefined = undefined;
+        const goalsQuery = query(collection(db, 'users', user.uid, 'goals'), where('isCompleted', '==', false), orderBy('createdAt', 'desc'), limit(1));
+        const goalsSnapshot = await getDocs(goalsQuery);
+        if (!goalsSnapshot.empty) {
+            activeGoalText = goalsSnapshot.docs[0].data().text;
+        }
+        
+        const checkinInput: GenerateCheckinPromptInput = {
+            userName: user.displayName || undefined,
+            userActiveGoal: activeGoalText,
+            userMbtiType: user.mbtiType || undefined,
+            daysSinceLastEntry: daysSinceLastEntry,
+        };
+        const aiPrompt = await generateCheckinPrompt(checkinInput);
+        setMessages([
+          { id: '0', text: aiPrompt.checkInPrompt, sender: 'ai', timestamp: new Date(), name: 'Mira', avatar: '/logo-ai.png' },
+        ]);
+      } catch (error) {
+        console.error("Error generating check-in prompt:", error);
+        setMessages([
+          { id: '0', text: "Welcome! I'm Mira. I'm here to listen, and please know this space is private and confidential. What's on your mind today?", sender: 'ai', timestamp: new Date(), name: 'Mira', avatar: '/logo-ai.png' },
+        ]);
+      } finally {
+        setIsLoadingSession(false);
+        setCurrentDbSessionId(null);
+      }
+    };
+
+    if (initialSessionId === 'new') {
+      initializeNewSession();
     } else {
       setIsLoadingSession(true);
       setCurrentDbSessionId(initialSessionId);
@@ -96,7 +132,7 @@ export default function JournalSessionPage() {
         if (docSnap.exists()) {
           const title = docSnap.data().title || `Session from ${(docSnap.data().createdAt.toDate() as Date).toLocaleDateString()}`;
           setSessionTitle(title);
-          setEditableSessionTitle(title); // Initialize editable title here
+          setEditableSessionTitle(title);
         } else {
           toast({ title: "Error", description: "Session not found.", variant: "destructive" });
           router.push('/journal');
@@ -234,12 +270,10 @@ export default function JournalSessionPage() {
       await handleStreakUpdate();
 
       let activeGoalText: string | undefined = undefined;
-      if (currentTherapistMode === 'Coach' || currentTherapistMode === 'Therapist') { // Also pass for Therapist mode
-          const goalsQuery = query(collection(db, 'users', user.uid, 'goals'), where('isCompleted', '==', false), orderBy('createdAt', 'desc'), limit(1));
-          const goalsSnapshot = await getDocs(goalsQuery);
-          if (!goalsSnapshot.empty) {
-              activeGoalText = goalsSnapshot.docs[0].data().text;
-          }
+      const goalsQuery = query(collection(db, 'users', user.uid, 'goals'), where('isCompleted', '==', false), orderBy('createdAt', 'desc'), limit(1));
+      const goalsSnapshot = await getDocs(goalsQuery);
+      if (!goalsSnapshot.empty) {
+          activeGoalText = goalsSnapshot.docs[0].data().text;
       }
       
       const historyForAI: AiChatMessage[] = messages
@@ -252,7 +286,7 @@ export default function JournalSessionPage() {
         mode: currentTherapistMode,
         goal: activeGoalText,
         messageHistory: historyForAI,
-        mbtiType: user?.mbtiType || null,
+        mbtiType: user?.mbtiType || undefined, // Pass undefined if null
         userName: user.displayName || undefined,
       };
 
@@ -271,9 +305,14 @@ export default function JournalSessionPage() {
       };
       await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), aiMessageData);
 
-      const sessionUpdateData: { lastUpdatedAt: any } = {
+      const sessionUpdateData: { lastUpdatedAt: any, firstMessagePreview?: string } = {
         lastUpdatedAt: serverTimestamp(),
       };
+      // Update firstMessagePreview if this is the very first user message in the session
+      if (messages.filter(m => m.sender === 'user').length <=1) { // includes the one being added
+          sessionUpdateData.firstMessagePreview = userMessageText.substring(0, 100);
+      }
+
       await updateDoc(doc(db, 'users', user.uid, 'journalSessions', actualSessionId!), sessionUpdateData);
 
     } catch (error: any) {
@@ -411,7 +450,7 @@ export default function JournalSessionPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
         className={cn(
-          "group flex items-start gap-2 sm:gap-3 max-w-[90%] xs:max-w-[85%] sm:max-w-[75%] my-4", // Added my-4 for vertical spacing
+          "group flex items-start gap-2 sm:gap-3 max-w-[90%] xs:max-w-[85%] sm:max-w-[75%] my-4", 
           isUserMessage ? 'ml-auto flex-row-reverse' : 'mr-auto'
         )}
       >
@@ -439,17 +478,7 @@ export default function JournalSessionPage() {
                 : 'bg-muted text-foreground rounded-bl-none'
             )}
           >
-             {message.imageDataUri ? (
-              <Image 
-                src={message.imageDataUri} 
-                alt="AI generated visual prompt" 
-                width={300} 
-                height={300} 
-                className="rounded-lg object-contain max-w-full h-auto my-2" 
-              />
-            ) : (
-              <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
-            )}
+            <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
             <p className={cn(
               "text-[10px] sm:text-[11px] mt-1.5 sm:mt-2 opacity-50 group-hover:opacity-100 transition-opacity duration-300", 
               isUserMessage ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground text-left'
@@ -464,9 +493,9 @@ export default function JournalSessionPage() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               transition={{ duration: 0.3, delay: 0.2, ease: "easeOut" }}
-              className="mt-2 pt-2 sm:pt-3 border border-primary/30 bg-accent/20 p-2.5 sm:p-3 rounded-xl shadow-sm"
+              className="mt-2 pt-2 sm:pt-3 border border-primary/30 bg-accent/20 dark:bg-accent/10 p-2.5 sm:p-3 rounded-xl shadow-sm"
             >
-              <p className="text-xs font-semibold text-primary/90 mb-1.5">Mira's Goal Suggestion:</p>
+              <p className="text-xs font-semibold text-primary/90 dark:text-primary/80 mb-1.5">Mira's Goal Suggestion:</p>
               <p className="text-xs sm:text-sm text-foreground/90 italic mb-2">"{message.suggestedGoalText}"</p>
               {!message.isGoalAdded ? (
                 <Button
@@ -673,7 +702,7 @@ export default function JournalSessionPage() {
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex items-start gap-2 sm:gap-3 mr-auto my-4" // Added my-4 for vertical spacing
+              className="flex items-start gap-2 sm:gap-3 mr-auto my-4" 
             >
               <Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0 shadow-sm border-2 border-background">
                 <AvatarImage src="/logo-ai.png" alt="Mira AI" />
@@ -723,7 +752,6 @@ export default function JournalSessionPage() {
             }}
           />
           <div className="absolute right-1 xs:right-1.5 sm:right-2 top-1/2 -translate-y-1/2 flex gap-0.5 sm:gap-1">
-            {/* Removed ImageIcon button based on previous correction to avoid feature creep for now */}
             <Button 
               type="button" 
               variant="ghost" 
@@ -751,4 +779,3 @@ export default function JournalSessionPage() {
       </form>
     </Card>  );
 }
-
