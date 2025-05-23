@@ -11,7 +11,8 @@ import { useAuth } from '@/contexts/auth-context';
 import { db } from '@/lib/firebase';
 import { collection, query, orderBy, limit, getDocs, Timestamp, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-
+import {motion} from 'framer-motion';
+// import { DashboardCard, DashboardCardHeader } from '@/components/ui/dashboard-card';
 import { analyzeWeeklySentiments, AnalyzeWeeklySentimentsInput } from '@/ai/flows/analyze-weekly-sentiments-flow'; // Output type not needed here if just displaying
 import { identifyJournalThemes, IdentifyJournalThemesInput } from '@/ai/flows/identify-journal-themes-flow';
 import { generatePersonalizedSuggestions, GeneratePersonalizedSuggestionsInput } from '@/ai/flows/generate-personalized-suggestions-flow';
@@ -464,4 +465,8 @@ const DashboardCardHeader = ({ title, description, icon }: { title: string, desc
       <span className="p-1.5 sm:p-2 bg-primary/10 rounded-full text-primary">
         {icon}
       </span>
-      <CardTitle className="text-lg sm:text-xl font-semibold text-foreground">{title}</CardTitle
+      <CardTitle className="text-lg sm:text-xl font-semibold text-foreground">{title}</CardTitle>
+      <p className='text-muted-foreground/80 text-sm sm:text-base'>{description}</p>
+    </div>
+  </CardHeader>
+)
