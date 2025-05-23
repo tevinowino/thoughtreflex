@@ -14,8 +14,8 @@ import {z} from 'genkit';
 import {
   GenerateDailyTopicContentInputSchema,
   GenerateDailyTopicContentOutputSchema,
-  type GenerateDailyTopicContentInput, // Import type
-  type GenerateDailyTopicContentOutput // Import type
+  type GenerateDailyTopicContentInput, 
+  type GenerateDailyTopicContentOutput 
 } from '@/ai/core/daily-topic-content-schemas';
 
 export type { GenerateDailyTopicContentInput, GenerateDailyTopicContentOutput };
@@ -31,28 +31,27 @@ const prompt = ai.definePrompt({
   prompt: `You are Mira, an empathetic AI therapist and content creator specializing in mental wellness and healing.
 Your task is to generate the full content for a Daily Guided Topic.
 
-Context:
+User Context:
 {{#if userName}}User's Name: {{userName}}{{/if}}
 {{#if detectedUserIssues.length}}
-Previously detected user themes/issues: {{#each detectedUserIssues}}{{{this}}}{{#unless @last}}, {{/unless}}{{/each}}.
-If these issues are specific (e.g., 'childhood trauma', 'body image concerns'), try to generate a topic that gently relates to or supports healing in that area.
-If issues are general (e.g., 'stress', 'anxiety') or not provided, choose a broad but highly relevant mental wellness theme.
-{{else}}
-No specific user issues detected. Please choose a general but impactful mental wellness or healing topic.
+Previously detected user themes/issues from journal: {{#each detectedUserIssues}}{{{this}}}{{#unless @last}}, {{/unless}}{{/each}}.
+{{/if}}
+{{#if userReportedStruggles.length}}
+User-reported struggles or focus areas: {{#each userReportedStruggles}}{{{this}}}{{#unless @last}}, {{/unless}}{{/each}}.
 {{/if}}
 
 Topic Generation Guidelines:
 1.  **Topic Selection**:
-    *   If specific detectedUserIssues are provided, select a topic that is relevant and supportive for one of those issues. Examples:
+    *   If userReportedStruggles are provided, prioritize generating a topic that is relevant and supportive for one of those struggles. Example: If "procrastination" is a struggle, a topic could be "Understanding and Overcoming Procrastination."
+    *   If no userReportedStruggles, but specific detectedUserIssues are present (e.g., 'childhood trauma', 'body image concerns'), try to generate a topic that gently relates to or supports healing in that area. Examples:
         *   If "childhood trauma" is an issue: "Understanding Your Past, Empowering Your Present" or "Gentle Steps in Healing Early Wounds."
         *   If "body image": "Cultivating Self-Acceptance: Your Body, Your Ally."
-        *   If "relationship anxiety": "Building Secure Connections."
-    *   If no specific issues, choose a general mental wellness topic. Examples: "Finding Moments of Gratitude," "Building Resilience to Stress," "The Power of Self-Compassion," "Nurturing Healthy Boundaries," "Exploring Your Core Values," "Practicing Mindfulness in Daily Life."
+    *   If no specific issues or struggles, choose a broad but highly relevant mental wellness theme. Examples: "Finding Moments of Gratitude," "Building Resilience to Stress," "The Power of Self-Compassion," "Nurturing Healthy Boundaries," "Exploring Your Core Values," "Practicing Mindfulness in Daily Life."
     *   Avoid overly clinical or jargon-heavy topic names. Keep it inviting.
 2.  **topicName**: A concise and engaging name for the topic (3-7 words).
 3.  **introduction**: A warm, empathetic introduction from Mira (2-3 sentences) explaining the topic and its importance, inviting the user to reflect.
 4.  **scaleQuestions**: Generate exactly 3 to 5 unique scale-based questions.
-    *   Each question should have an id (e.g., "q1", "q2", "q3").
+    *   Each question should have an id (e.g., "q1_topic", "q2_topic", "q3_topic". Make them unique per topic).
     *   The text should be a statement the user rates on a 1-5 scale (e.g., "I feel confident in expressing my needs to others.").
     *   Optionally, set reverseScore: true if a lower numerical score (e.g., 1 or 2) actually indicates a more positive or healthier stance for that specific question.
 5.  **scoreRanges**: Based on the aggregate score from the scale questions (assume 1-5 per question, so for 3 questions, total score is 3-15; for 5 questions, total 5-25).
@@ -65,7 +64,6 @@ Topic Generation Guidelines:
 Ensure your output strictly adheres to the JSON schema for GenerateDailyTopicContentOutput.
 The AI should generate varied topics and questions each time, even if user context is similar, to keep it fresh.
 Focus on being supportive, insightful, and practical.
-Example question id format: "q1_selfworth", "q2_boundaries". Make them unique.
 `,
 });
 
@@ -98,3 +96,4 @@ const generateDailyTopicContentFlow = ai.defineFlow(
     return output;
   }
 );
+    

@@ -16,11 +16,11 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
   reauthenticateWithPopup,
+  deleteUser as deleteFirebaseAuthUser, 
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc, Timestamp, collection, getDocs, writeBatch, deleteDoc as deleteFirestoreDoc } from 'firebase/firestore';
-import { useRouter } from 'next/navigation';
 import type { GenerateDailyTopicContentOutput } from '@/ai/core/daily-topic-content-schemas';
-import type { DailyTopicUserAnswers } from '@/ai/core/daily-topic-content-schemas'; // Correct import
+// import type { DailyTopicUserAnswers } from '@/ai/core/daily-topic-content-schemas'; // Correct import - was duplicated
 
 export interface UserProfile {
   uid: string;
@@ -45,13 +45,14 @@ export interface UserProfile {
   dailyGeneratedTopics?: {
     [date: string]: GenerateDailyTopicContentOutput & {
       completed?: boolean;
-      userAnswers?: DailyTopicUserAnswers;
+      userAnswers?: any; // Using 'any' for now, can be refined with DailyTopicUserAnswers from core schemas
     };
   } | null;
   lastDailyTopicCompletionDate?: string | null; // YYYY-MM-DD
   milestonesAchieved?: number[];
   lastCompassionCheckInDate?: string | null; // YYYY-MM-DD
   lastRecapGeneratedDate?: string | null; // YYYY-MM-DD, for weekly recap restriction
+  userStruggles?: string[]; // New field for user-inputted struggles
 }
 
 
@@ -88,7 +89,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     lastDailyTopicCompletionDate: null,
     milestonesAchieved: [],
     lastCompassionCheckInDate: null,
-    lastRecapGeneratedDate: null, // Initialize new field
+    lastRecapGeneratedDate: null,
+    userStruggles: [], // Initialize new field
   };
 
   const fetchAndSetUser = async (firebaseUser: FirebaseUser) => {
@@ -101,21 +103,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         ...profileData,
         uid: firebaseUser.uid,
         email: firebaseUser.email || profileData.email || null,
-        displayName: firebaseUser.displayName || profileData.displayName || null,
+        displayName: firebaseUser.displayName || profileData.displayName || 'Valued User',
         photoURL: firebaseUser.photoURL || profileData.photoURL || null,
         detectedIssues: profileData.detectedIssues || null,
         dailyGeneratedTopics: profileData.dailyGeneratedTopics || null,
         latestMood: profileData.latestMood || null,
         milestonesAchieved: profileData.milestonesAchieved || [],
         lastRecapGeneratedDate: profileData.lastRecapGeneratedDate || null,
+        userStruggles: profileData.userStruggles || [], // Load user struggles
       } as UserProfile);
     } else {
+      // New user, set up their profile
       const newUserProfile: UserProfile = {
         uid: firebaseUser.uid,
         email: firebaseUser.email || null,
         displayName: firebaseUser.displayName || 'Valued User',
         photoURL: firebaseUser.photoURL || null,
-        ...defaultUserProfileValues,
+        ...defaultUserProfileValues, // This will include userStruggles: []
       };
       await setDoc(userDocRef, newUserProfile, { merge: true });
       setUser(newUserProfile);
@@ -160,13 +164,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const existingProfile = userDocSnap.data() as UserProfile;
       userProfileData = {
         ...defaultUserProfileValues,
-        ...existingProfile,
+        ...existingProfile, // Load existing data first
         uid: firebaseUser.uid, 
         email: firebaseUser.email || null,
-        displayName: initialDisplayName,
+        displayName: initialDisplayName, // Then ensure these are from auth/param
         photoURL: initialPhotoURL,
         milestonesAchieved: existingProfile.milestonesAchieved || [],
         lastRecapGeneratedDate: existingProfile.lastRecapGeneratedDate || null,
+        userStruggles: existingProfile.userStruggles || [], // Preserve existing or use default
       };
     } else {
       userProfileData = {
@@ -174,7 +179,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         email: firebaseUser.email || null,
         displayName: initialDisplayName,
         photoURL: initialPhotoURL,
-        ...defaultUserProfileValues,
+        ...defaultUserProfileValues, // New user gets all defaults
       };
     }
     
@@ -303,7 +308,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const currentIssues = user.detectedIssues || {};
         firestoreUpdateData.detectedIssues = { ...currentIssues };
         for (const issueKey in details.detectedIssues) {
-           if (details.detectedIssues[issueKey]) { // Check if issueKey exists in details
+           if (details.detectedIssues[issueKey]) { 
             firestoreUpdateData.detectedIssues[issueKey] = {
                 occurrences: ((currentIssues[issueKey]?.occurrences || 0) + (details.detectedIssues[issueKey]?.occurrences || 0)),
                 lastDetected: details.detectedIssues[issueKey]?.lastDetected || Timestamp.now(),
@@ -318,10 +323,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       await updateDoc(userDocRef, firestoreUpdateData);
       
-      const updatedUser = { ...user, ...firestoreUpdateData } as UserProfile; // Cast to UserProfile
+      const updatedUser = { ...user, ...firestoreUpdateData } as UserProfile; 
       if (details.dailyGeneratedTopics) updatedUser.dailyGeneratedTopics = firestoreUpdateData.dailyGeneratedTopics;
       if (details.detectedIssues) updatedUser.detectedIssues = firestoreUpdateData.detectedIssues;
       if (details.milestonesAchieved) updatedUser.milestonesAchieved = firestoreUpdateData.milestonesAchieved;
+      if (details.userStruggles) updatedUser.userStruggles = firestoreUpdateData.userStruggles; // Ensure this is updated
 
 
       setUser(updatedUser);
@@ -354,17 +360,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const provider = new GoogleAuthProvider();
         await reauthenticateWithPopup(currentUser, provider);
       } else {
+        // Potentially other providers or anonymous users - for this app, we focus on Email and Google
         throw { code: 'auth/reauthentication-not-supported', message: 'Re-authentication method not supported for this user.' } as AuthError;
       }
 
+      // Firestore data deletion
       const batch = writeBatch(db);
-      const collectionsToDelete = ['goals', 'journalSessions', 'notebookEntries', 'weeklyRecaps', 'mindShifts', 'dailyMoods', 'dailyGeneratedTopics']; 
-
+      const collectionsToDelete = ['goals', 'journalSessions', 'notebookEntries', 'weeklyRecaps', 'mindShifts', 'dailyMoods']; 
+      
       for (const collName of collectionsToDelete) {
         const collRef = collection(db, 'users', user.uid, collName);
         const snapshot = await getDocs(collRef);
         for (const docSnap of snapshot.docs) {
-          if (collName === 'journalSessions') {
+          if (collName === 'journalSessions') { // Need to delete subcollections of messages
             const messagesCollRef = collection(db, 'users', user.uid, 'journalSessions', docSnap.id, 'messages');
             const messagesSnapshot = await getDocs(messagesCollRef);
             messagesSnapshot.forEach(msgDoc => batch.delete(msgDoc.ref));
@@ -373,20 +381,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       }
       
+      // User's main profile document: Instead of deleting, reset it.
       const userDocRef = doc(db, 'users', user.uid);
-      
       const freshUserProfileData: UserProfile = {
         uid: currentUser.uid,
         email: currentUser.email || null,
-        displayName: currentUser.displayName || 'Valued User',
-        photoURL: currentUser.photoURL || null,
-        ...defaultUserProfileValues,
+        displayName: currentUser.displayName || 'Valued User', // Keep existing auth display name
+        photoURL: currentUser.photoURL || null, // Keep existing auth photo URL
+        ...defaultUserProfileValues, // Reset all app-specific data to defaults
       };
+      batch.set(userDocRef, freshUserProfileData); // Reset profile
       
-      batch.set(userDocRef, freshUserProfileData); // Reset profile to defaults
       await batch.commit(); 
       
-      setUser(freshUserProfileData); // Update local user state
+      setUser(freshUserProfileData); // Update local user state to fresh profile
       
     } catch (err) {
       handleAuthError(err as AuthError);
@@ -421,4 +429,4 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
+    

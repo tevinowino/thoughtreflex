@@ -1,3 +1,4 @@
+
 // src/app/(app)/daily-topic/page.tsx
 'use client';
 
@@ -10,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth, UserProfile } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { generateDailyTopicContent, GenerateDailyTopicContentInput, GenerateDailyTopicContentOutput } from '@/ai/flows/generate-daily-topic-content-flow';
-import type { DailyTopicScoreRangeResponse } from '@/ai/core/daily-topic-content-schemas';
+import type { DailyTopicScoreRangeResponse, DailyTopicUserAnswers } from '@/ai/core/daily-topic-content-schemas';
 import { ArrowLeft, CheckCircle, Info, Lightbulb, Loader2, Save } from 'lucide-react';
 import Link from 'next/link';
 import { Timestamp } from 'firebase/firestore';
@@ -35,18 +36,18 @@ export default function DailyTopicPage() {
     const loadOrGenerateTopic = async () => {
       setIsLoadingTopic(true);
       const userGeneratedTopics = user.dailyGeneratedTopics || {};
+      const todayData = userGeneratedTopics[todayDateString];
       
-      if (userGeneratedTopics[todayDateString]) {
-        const topicData = userGeneratedTopics[todayDateString];
-        setTodayTopicContent(topicData);
-        if (topicData.completed && topicData.userAnswers) {
-          setScores(topicData.userAnswers.scores.reduce((acc, score, index) => {
-            const questionId = topicData.scaleQuestions[index]?.id;
+      if (todayData) {
+        setTodayTopicContent(todayData);
+        if (todayData.completed && todayData.userAnswers) {
+          setScores(todayData.userAnswers.scores.reduce((acc, score, index) => {
+            const questionId = todayData.scaleQuestions[index]?.id;
             if (questionId) acc[questionId] = score;
             return acc;
           }, {} as Record<string, number>));
-          setMiraReflectionData(determineReflection(topicData, topicData.userAnswers.scores));
-          setJournalEntry(topicData.userAnswers.userEntry || '');
+          setMiraReflectionData(determineReflection(todayData, todayData.userAnswers.scores));
+          setJournalEntry(todayData.userAnswers.userEntry || '');
           setCurrentStage('completed');
         } else {
           setCurrentStage('questions');
@@ -57,6 +58,7 @@ export default function DailyTopicPage() {
           const input: GenerateDailyTopicContentInput = {
             userName: user.displayName || undefined,
             detectedUserIssues: user.detectedIssues ? Object.keys(user.detectedIssues) : undefined,
+            userReportedStruggles: user.userStruggles || undefined,
           };
           const generatedTopic = await generateDailyTopicContent(input);
           setTodayTopicContent(generatedTopic);
@@ -64,7 +66,7 @@ export default function DailyTopicPage() {
           const updatedProfilePart: Partial<UserProfile> = {
             dailyGeneratedTopics: {
               ...userGeneratedTopics,
-              [todayDateString]: { ...generatedTopic, completed: false, userAnswers: null }, // Changed undefined to null
+              [todayDateString]: { ...generatedTopic, completed: false, userAnswers: null },
             }
           };
           await updateUserProfile(updatedProfilePart);
@@ -80,7 +82,8 @@ export default function DailyTopicPage() {
     };
 
     loadOrGenerateTopic();
-  }, [user, authLoading, todayDateString, toast, updateUserProfile, refreshUserProfile]); // Removed determineReflection from deps
+  }, [user, authLoading, todayDateString]); 
+
 
   const determineReflection = (topic: GenerateDailyTopicContentOutput, userScores: number[]): DailyTopicScoreRangeResponse => {
     let totalScore = 0;
@@ -129,26 +132,29 @@ export default function DailyTopicPage() {
     setIsSaving(true);
     try {
       const userScoresArray = todayTopicContent.scaleQuestions.map(q => scores[q.id] || 0);
-      const userAnswersData = {
+      const userAnswersData: DailyTopicUserAnswers = { // Use defined type
         topicName: todayTopicContent.topicName,
         scores: userScoresArray,
         miraResponse: miraReflectionData.miraResponse,
         journalPrompt: miraReflectionData.journalPrompt,
-        userEntry: journalEntry || null, // Ensure userEntry is null if empty
+        userEntry: journalEntry.trim() || null, 
         completedAt: Timestamp.now(),
       };
 
-      const updatedTopics = {
-        ...(user.dailyGeneratedTopics || {}),
-        [todayDateString]: {
-          ...(user.dailyGeneratedTopics?.[todayDateString] || todayTopicContent), 
-          completed: true,
-          userAnswers: userAnswersData,
-        }
+      const currentGeneratedTopics = user.dailyGeneratedTopics || {};
+      const updatedTopicForDay = {
+        ...(currentGeneratedTopics[todayDateString] || todayTopicContent),
+        completed: true,
+        userAnswers: userAnswersData,
+      };
+
+      const updatedAllTopics = {
+        ...currentGeneratedTopics,
+        [todayDateString]: updatedTopicForDay
       };
       
       await updateUserProfile({ 
-        dailyGeneratedTopics: updatedTopics,
+        dailyGeneratedTopics: updatedAllTopics,
         lastDailyTopicCompletionDate: todayDateString,
       });
       if (refreshUserProfile) await refreshUserProfile();
@@ -331,3 +337,4 @@ export default function DailyTopicPage() {
     </div>
   );
 }
+    

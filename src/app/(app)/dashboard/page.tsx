@@ -1,9 +1,10 @@
+
 // src/app/(app)/dashboard/page.tsx
 'use client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useAuth, UserProfile } from '@/contexts/auth-context';
-import { BookText, Target, Sparkles, CalendarCheck, Edit3, Loader2, Flame, ArrowRight, Smile, Meh, Frown, Sunrise, CheckCircle, Brain, MessageCircle } from 'lucide-react';
+import { BookText, Target, Sparkles, CalendarCheck, Edit3, Loader2, Flame, ArrowRight, Smile, Meh, Frown, Sunrise, CheckCircle, Brain, MessageCircle, AlertCircle } from 'lucide-react'; // Added AlertCircle
 import Link from 'next/link';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
@@ -12,7 +13,7 @@ import { collection, query, orderBy, limit, onSnapshot, where, Timestamp, doc, s
 import { useToast } from '@/hooks/use-toast';
 import type { WeeklyRecap } from '../recaps/page'; 
 import { generateDailyAffirmation, GenerateDailyAffirmationOutput } from '@/ai/flows/generate-affirmation-flow';
-import type { GenerateDailyTopicContentOutput } from '@/ai/core/daily-topic-content-schemas'; // For daily generated topics
+import type { GenerateDailyTopicContentOutput } from '@/ai/core/daily-topic-content-schemas'; 
 import { motion } from 'framer-motion';
 
 interface RecentJournal {
@@ -45,7 +46,7 @@ export default function DashboardPage() {
   const [dailyAffirmation, setDailyAffirmation] = useState<string | null>(null);
   const [loadingAffirmation, setLoadingAffirmation] = useState(true);
   
-  const [todaysGeneratedTopic, setTodaysGeneratedTopic] = useState<GenerateDailyTopicContentOutput | null>(null);
+  const [todaysGeneratedTopicData, setTodaysGeneratedTopicData] = useState<GenerateDailyTopicContentOutput | null>(null);
   const [isTopicCompletedToday, setIsTopicCompletedToday] = useState(false);
 
   const getTodayDateString = () => new Date().toISOString().split('T')[0];
@@ -56,7 +57,6 @@ export default function DashboardPage() {
     setCurrentStreak(user.currentStreak || 0);
     setLongestStreak(user.longestStreak || 0);
 
-    // Fetch Today's Mood
     setLoadingMood(true);
     const todayDateStr = getTodayDateString();
     if (user.latestMood && user.latestMood.date === todayDateStr) {
@@ -77,7 +77,6 @@ export default function DashboardPage() {
       });
     }
     
-    // Fetch Daily Affirmation
     setLoadingAffirmation(true);
     const storedAffirmation = sessionStorage.getItem('dailyAffirmation');
     const storedAffirmationDate = sessionStorage.getItem('dailyAffirmationDate');
@@ -99,14 +98,12 @@ export default function DashboardPage() {
         .finally(() => setLoadingAffirmation(false));
     }
 
-    // Check for Today's Guided Topic status
     if (user.dailyGeneratedTopics && user.dailyGeneratedTopics[todayDateStr]) {
       const topicData = user.dailyGeneratedTopics[todayDateStr];
-      setTodaysGeneratedTopic(topicData);
+      setTodaysGeneratedTopicData(topicData);
       setIsTopicCompletedToday(!!topicData.completed);
     } else {
-      // Topic will be generated on visit to /daily-topic page if not present
-      setTodaysGeneratedTopic(null); 
+      setTodaysGeneratedTopicData(null); 
       setIsTopicCompletedToday(false);
     }
 
@@ -233,7 +230,7 @@ export default function DashboardPage() {
     </motion.div>
   );
   
-  const DashboardCardHeader = ({ title, description, icon }: { title: string, description: string, icon: React.ReactNode }) => (
+  const DashboardCardHeader = ({ title, description, icon }: { title: string, description?: string, icon: React.ReactNode }) => (
     <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-5">
       <div className="flex items-center gap-2 sm:gap-3 mb-1">
         <span className="p-1.5 sm:p-2 bg-primary/10 rounded-full text-primary">
@@ -287,7 +284,7 @@ export default function DashboardPage() {
             <CardContent className="p-6 sm:p-8 text-center">
               <div className="inline-flex items-center justify-center gap-3 mb-4 bg-accent/10 px-4 py-2 rounded-full">
                 <Sunrise className="h-6 w-6 text-amber-500" />
-                <h3 className="text-lg sm:text-xl font-semibold text-foreground">Today's Affirmation</h3>
+                <h3 className="text-lg sm:text-xl font-semibold text-foreground">Your Daily Affirmation</h3>
               </div>
               {loadingAffirmation ? (
                 <div className="flex justify-center items-center h-16">
@@ -304,7 +301,7 @@ export default function DashboardPage() {
         <DashboardCard className="bg-card/90 backdrop-blur-sm">
             <DashboardCardHeader 
             title="Today's Guided Topic" 
-            description={todaysGeneratedTopic ? `Focus: ${todaysGeneratedTopic.topicName}` : "A daily reflection to guide your thoughts."}
+            description={todaysGeneratedTopicData ? `Focus: ${todaysGeneratedTopicData.topicName}` : "A daily reflection to guide your thoughts."}
             icon={<Brain className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-400" />} 
             />
             <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 pt-0 flex-grow flex flex-col justify-center items-center">
@@ -316,9 +313,9 @@ export default function DashboardPage() {
                         <Link href="/daily-topic">Review Your Entry</Link>
                     </Button>
                 </div>
-            ) : todaysGeneratedTopic ? (
+            ) : todaysGeneratedTopicData ? (
                 <div className="flex flex-col items-center gap-3 py-4">
-                    <p className="text-center text-sm text-muted-foreground">{todaysGeneratedTopic.introduction.substring(0,150)}...</p>
+                    <p className="text-center text-sm text-muted-foreground">{todaysGeneratedTopicData.introduction.substring(0,150)}...</p>
                     <Button asChild size="sm" className="mt-2">
                         <Link href="/daily-topic">Start Topic</Link>
                     </Button>
@@ -327,7 +324,7 @@ export default function DashboardPage() {
                 <div className="flex flex-col items-center gap-3 py-4">
                     <MessageCircle className="h-10 w-10 text-muted-foreground/40" />
                     <p className="text-center text-sm text-muted-foreground">
-                        A new guided topic awaits you. Head to the Daily Topic page to begin!
+                        A new guided topic will be generated for you when you visit the Daily Topic page.
                     </p>
                      <Button asChild size="sm" className="mt-2">
                         <Link href="/daily-topic">Go to Daily Topic</Link>
@@ -337,7 +334,7 @@ export default function DashboardPage() {
             </CardContent>
         </DashboardCard>
   
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-5 sm:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6">
           <DashboardCard className="bg-card/90 backdrop-blur-sm">
             <DashboardCardHeader 
               title="Daily Mood" 
@@ -565,3 +562,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+    

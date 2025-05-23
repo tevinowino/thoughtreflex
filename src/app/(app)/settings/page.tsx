@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea'; // Added Textarea
 import { useAuth, UserProfile } from '@/contexts/auth-context';
-import { UserCircle, Bell, Palette, ShieldCheck, LogOut, Brain, Zap, Smile, Image as ImageIcon, UserSquare2, Trash2, Loader2, TestTube2, DownloadCloud } from 'lucide-react';
+import { UserCircle, Bell, Palette, ShieldCheck, LogOut, Brain, Zap, Smile, Image as ImageIcon, UserSquare2, Trash2, Loader2, TestTube2, DownloadCloud, AlertTriangle } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -35,10 +36,8 @@ import {
   DialogDescription as ReauthDialogDescription,
   DialogFooter as ReauthDialogFooter,
 } from "@/components/ui/dialog";
-import { EmailAuthProvider, GoogleAuthProvider, reauthenticateWithPopup, reauthenticateWithCredential, signOut as firebaseSignOut } from 'firebase/auth';
-import { auth, db } from '@/lib/firebase';
-import { doc, getDoc, setDoc, collection, getDocs, writeBatch, deleteDoc as deleteFirestoreDoc } from 'firebase/firestore';
-import type { GenerateDailyTopicContentOutput } from '@/ai/core/daily-topic-content-schemas';
+import { EmailAuthProvider, GoogleAuthProvider, reauthenticateWithPopup, reauthenticateWithCredential } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 import InstallPWAButton from '@/components/app/install-pwa-button';
 
 
@@ -55,7 +54,7 @@ const avatarOptions = [
 
 
 export default function SettingsPage() {
-  const { user, signOut: contextSignOut, updateUserProfile, loading: authLoading, deleteUserData, error: authError, refreshUserProfile } = useAuth();
+  const { user, signOut: contextSignOut, updateUserProfile, loading: authLoading, deleteUserData: contextDeleteUserData, error: authError, refreshUserProfile } = useAuth();
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
 
@@ -65,6 +64,7 @@ export default function SettingsPage() {
   const [defaultTherapistMode, setDefaultTherapistMode] = useState<TherapistMode>(user?.defaultTherapistMode || 'Therapist');
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState(user?.photoURL || '');
   const [currentMbtiType, setCurrentMbtiType] = useState(user?.mbtiType || 'Not Set');
+  const [userStrugglesInput, setUserStrugglesInput] = useState(user?.userStruggles?.join(', ') || ''); // For textarea
   const [isSaving, setIsSaving] = useState(false);
   
   const [darkModeVisual, setDarkModeVisual] = useState(false);
@@ -86,6 +86,7 @@ export default function SettingsPage() {
       setDefaultTherapistMode(user.defaultTherapistMode || 'Therapist');
       setSelectedAvatarUrl(user.photoURL || '');
       setCurrentMbtiType(user.mbtiType || 'Not Set');
+      setUserStrugglesInput(user.userStruggles?.join(', ') || '');
     }
   }, [user]);
 
@@ -107,11 +108,16 @@ export default function SettingsPage() {
       if (newPhotoURL !== (user.photoURL || null)) { 
           profileUpdates.photoURL = newPhotoURL;
       }
-      // MBTI type is saved on its own page, so not handled here.
+      
+      const strugglesArray = userStrugglesInput.split(',').map(s => s.trim()).filter(s => s !== '');
+      if (JSON.stringify(strugglesArray) !== JSON.stringify(user.userStruggles || [])) {
+          profileUpdates.userStruggles = strugglesArray;
+      }
 
 
       if (Object.keys(profileUpdates).length > 0) {
         await updateUserProfile(profileUpdates);
+        if (refreshUserProfile) await refreshUserProfile(); // Refresh context after update
       }
       
       toast({
@@ -145,10 +151,10 @@ export default function SettingsPage() {
     );
 
     if (isEmailProvider) {
-      setIsPasswordPromptOpen(true); // Open password prompt for email users
-    } else { // For OAuth providers like Google
+      setIsPasswordPromptOpen(true); 
+    } else { 
       try {
-        const provider = new GoogleAuthProvider(); // Or other providers
+        const provider = new GoogleAuthProvider(); 
         await reauthenticateWithPopup(auth.currentUser, provider);
         await handleFinalDelete(); 
       } catch (reauthError: any) {
@@ -158,7 +164,7 @@ export default function SettingsPage() {
           description: reauthError.message || "Could not re-authenticate. Please try again.",
           variant: "destructive",
         });
-        setIsDeleteConfirmationOpen(false); // Close main confirmation dialog
+        setIsDeleteConfirmationOpen(false);
       }
     }
   };
@@ -171,34 +177,36 @@ export default function SettingsPage() {
     }
 
     setIsDeletingData(true);
-    setIsPasswordPromptOpen(false); // Close password prompt if open
+    setIsPasswordPromptOpen(false); 
 
     try {
+      // Re-authentication for email users if password was provided
       if (auth.currentUser.providerData.some(p => p.providerId === EmailAuthProvider.PROVIDER_ID) && passwordForDelete) {
         const credential = EmailAuthProvider.credential(auth.currentUser.email!, passwordForDelete);
         await reauthenticateWithCredential(auth.currentUser, credential);
-      }
+      } // For Google/OAuth, re-auth should have happened before calling this via handleDeleteDataConfirmed
 
-      await deleteUserData(); 
+      await contextDeleteUserData(); // Call the function from context to delete data
       toast({
         title: "Data Deleted Successfully",
         description: "All your personal data has been removed. Your profile has been reset.",
       });
-      // Refresh user state to reflect reset profile
+      
       if(refreshUserProfile) await refreshUserProfile();
-      // Optionally, re-initialize local state if needed or let useEffect(user) handle it
-      setDisplayName(user.displayName || ''); // Or new default
+      // Reset local form state after successful data deletion
+      setDisplayName(auth.currentUser?.displayName || 'Valued User'); // Use current auth name
       setDefaultTherapistMode('Therapist');
-      setSelectedAvatarUrl('');
+      setSelectedAvatarUrl(auth.currentUser?.photoURL || ''); // Use current auth photo
       setCurrentMbtiType('Not Set');
+      setUserStrugglesInput('');
 
 
     } catch (error: any) {
       console.error("Data deletion error:", error);
        let description = error.message || "Could not delete your data.";
-       if (error.code === 'auth/wrong-password') {
+       if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         description = "Incorrect password. Data deletion cancelled.";
-        setIsPasswordPromptOpen(true); // Re-open password prompt on wrong password
+        setIsPasswordPromptOpen(true); 
       } else if (error.code === 'auth/requires-recent-login' || error.code === 'auth/user-token-expired') {
         description = "Your session has expired. Please log out and log back in to perform this action.";
       }
@@ -295,7 +303,6 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-
       <Card className="shadow-lg rounded-xl sm:rounded-2xl">
         <CardHeader className="p-4 sm:p-6">
           <CardTitle className="flex items-center gap-2 text-lg sm:text-xl"><Brain className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> App Preferences</CardTitle>
@@ -327,7 +334,7 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between">
             <div>
                 <Label htmlFor="notifications" className="font-medium text-sm">Enable Notifications</Label>
-                <p className="text-xs text-muted-foreground">Receive reminders and updates. (Mocked)</p>
+                <p className="text-xs text-muted-foreground">Receive reminders and updates. (Feature in development)</p>
             </div>
             <Switch id="notifications" checked={notificationsEnabled} onCheckedChange={setNotificationsEnabled} />
           </div>
@@ -341,6 +348,24 @@ export default function SettingsPage() {
             </div>
             <Switch id="darkMode" checked={darkModeVisual} onCheckedChange={handleThemeChange} /> 
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-lg rounded-xl sm:rounded-2xl">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl"><AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> My Focus Areas & Struggles</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">Help Mira understand what you'd like to focus on. List areas separated by commas (e.g., anxiety, work stress, self-esteem).</CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 sm:p-6">
+            <Textarea
+                id="userStruggles"
+                placeholder="e.g., managing daily anxiety, improving relationship communication, building self-confidence..."
+                value={userStrugglesInput}
+                onChange={(e) => setUserStrugglesInput(e.target.value)}
+                rows={3}
+                className="text-sm sm:text-base bg-muted/30"
+            />
+            <p className="text-xs text-muted-foreground mt-2">This information helps personalize your Daily Guided Topics.</p>
         </CardContent>
       </Card>
 
@@ -397,7 +422,7 @@ export default function SettingsPage() {
             </Button>
             <AlertDialog open={isDeleteConfirmationOpen} onOpenChange={setIsDeleteConfirmationOpen}>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive" className={cn("w-full justify-center shadow-sm", buttonVariants({variant: "destructive"}))} onClick={() => setIsDeleteConfirmationOpen(true)}>
+                <Button variant="destructive" className={cn("w-full justify-center shadow-sm")} onClick={() => setIsDeleteConfirmationOpen(true)}>
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete My Data
                 </Button>
@@ -465,3 +490,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+    

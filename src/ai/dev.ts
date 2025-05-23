@@ -1,3 +1,4 @@
+
 import { config } from 'dotenv';
 config();
 
@@ -13,5 +14,8 @@ import '@/ai/core/affirmation-schemas.ts';
 import '@/ai/flows/generate-affirmation-flow.ts';
 import '@/ai/core/checkin-prompt-schemas.ts';
 import '@/ai/flows/generate-checkin-prompt-flow.ts';
-import '@/ai/core/daily-topic-content-schemas.ts'; // Added for new schemas
-import '@/ai/flows/generate-daily-topic-content-flow.ts'; // Added for new flow
+import '@/ai/core/daily-topic-content-schemas.ts'; 
+import '@/ai/flows/generate-daily-topic-content-flow.ts'; 
+import '@/ai/core/notebook-tool.ts'; 
+import '@/ai/flows/save-to-notebook-flow.ts';
+    

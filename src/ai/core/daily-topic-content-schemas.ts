@@ -1,6 +1,8 @@
+
 // src/ai/core/daily-topic-content-schemas.ts
 // This file does NOT use 'use server'. It contains reusable schema definitions for daily topic content.
 import {z} from 'genkit';
+import type { Timestamp } from 'firebase/firestore';
 
 export const DailyTopicScaleQuestionSchema = z.object({
   id: z.string().describe("A unique identifier for the question, e.g., 'q1', 'q2'."),
@@ -19,6 +21,7 @@ export type DailyTopicScoreRangeResponse = z.infer<typeof DailyTopicScoreRangeRe
 export const GenerateDailyTopicContentInputSchema = z.object({
   userName: z.string().optional().describe("The user's display name, for personalization."),
   detectedUserIssues: z.array(z.string()).optional().describe("A list of emotional issues or themes previously detected for the user, e.g., ['anxiety', 'self-doubt']. Helps in tailoring the topic."),
+  userReportedStruggles: z.array(z.string()).optional().describe("A list of user-reported struggles or focus areas to help tailor the topic.")
 });
 export type GenerateDailyTopicContentInput = z.infer<typeof GenerateDailyTopicContentInputSchema>;
 
@@ -33,7 +36,18 @@ export const GenerateDailyTopicContentOutputSchema = z.object({
   }).describe("Personalized responses based on aggregated scores from scale questions."),
   generalResource: z.object({
     text: z.string().describe("Descriptive text for a general resource related to the topic."),
-    link: z.string().optional().describe("An optional URL to an external resource. Should be a valid web address if provided."),
+    link: z.string().url().optional().describe("An optional URL to an external resource. Should be a valid web address if provided."),
   }).optional().describe("An optional general resource suggestion relevant to the topic."),
 });
 export type GenerateDailyTopicContentOutput = z.infer<typeof GenerateDailyTopicContentOutputSchema>;
+
+// For storing user answers in Firestore
+export interface DailyTopicUserAnswers {
+  topicName: string;
+  scores: number[];
+  miraResponse: string;
+  journalPrompt: string;
+  userEntry: string | null;
+  completedAt: Timestamp;
+}
+    
