@@ -25,7 +25,7 @@ export type GenerateDailyTopicContentInput = z.infer<typeof GenerateDailyTopicCo
 export const GenerateDailyTopicContentOutputSchema = z.object({
   topicName: z.string().describe("The name or title of the daily guided topic."),
   introduction: z.string().describe("An empathetic introduction to the topic from Mira."),
-  scaleQuestions: z.array(DailyTopicScaleQuestionSchema).length(3,5).describe("An array of 3 to 5 scale-based questions for the user to answer (1-5)."),
+  scaleQuestions: z.array(DailyTopicScaleQuestionSchema).min(3).max(5).describe("An array of 3 to 5 unique scale-based questions for the user to answer (1-5)."),
   scoreRanges: z.object({
     low: DailyTopicScoreRangeResponseSchema.describe("Response for users scoring in the low range."),
     medium: DailyTopicScoreRangeResponseSchema.describe("Response for users scoring in the medium range."),
@@ -33,7 +33,7 @@ export const GenerateDailyTopicContentOutputSchema = z.object({
   }).describe("Personalized responses based on aggregated scores from scale questions."),
   generalResource: z.object({
     text: z.string().describe("Descriptive text for a general resource related to the topic."),
-    link: z.string().url().optional().describe("An optional URL to an external resource."),
+    link: z.string().optional().describe("An optional URL to an external resource. Should be a valid web address if provided."),
   }).optional().describe("An optional general resource suggestion relevant to the topic."),
 });
 export type GenerateDailyTopicContentOutput = z.infer<typeof GenerateDailyTopicContentOutputSchema>;
