@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef, FormEvent, useCallback } from 'reac
 import { useParams, useRouter } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, Save, ImageIcon } from 'lucide-react';
+import { Send, Settings2, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, Save, ImageIcon, Mic } from 'lucide-react';
 import { useAuth, UserProfile } from '@/contexts/auth-context';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -13,7 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'; // Added this import
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Brain } from 'lucide-react'; // Added Brain for AI avatar
 import { cn } from '@/lib/utils';
 import { getTherapistResponse, TherapistModeInput, AiChatMessage as AiFlowChatMessage, ReframeThoughtOutput } from '@/ai/flows/therapist-modes';
 import { generateCheckinPrompt, GenerateCheckinPromptInput } from '@/ai/flows/generate-checkin-prompt-flow';
@@ -25,7 +26,7 @@ import { motion } from 'framer-motion';
 import { Label } from '@/components/ui/label';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { showLocalNotification } from '@/components/app/notification-manager';
-import ChatBubble, { ChatMessage } from '@/components/app/chat-bubble'; 
+import ChatBubble, { ChatMessage } from '@/components/app/chat-bubble';
 
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
 
@@ -53,8 +54,7 @@ export default function JournalSessionPage() {
   const [currentDbSessionId, setCurrentDbSessionId] = useState<string | null>(initialSessionId === 'new' ? null : initialSessionId);
   const [isSessionSettingsOpen, setIsSessionSettingsOpen] = useState(false);
   const [isDeletingSession, setIsDeletingSession] = useState(false);
-
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  
   const viewportRef = useRef<HTMLDivElement>(null);
 
 
@@ -64,7 +64,6 @@ export default function JournalSessionPage() {
     }
   }, [user?.defaultTherapistMode]);
 
-  // Fetch session data and messages
   useEffect(() => {
     if (!user || authLoading) return;
 
@@ -154,19 +153,18 @@ export default function JournalSessionPage() {
     }
   }, [initialSessionId, user, authLoading, router, toast]);
 
- useEffect(() => {
+  useEffect(() => {
     if (viewportRef.current) {
       viewportRef.current.scrollTo({ top: viewportRef.current.scrollHeight, behavior: 'smooth' });
     }
   }, [messages]);
 
-
   const handleStreakUpdate = useCallback(async () => {
-    if (!user || !refreshUserProfile) return;
+    if (!user || !refreshUserProfile || !updateUserProfile) return;
 
     try {
       const userDocRef = doc(db, 'users', user.uid);
-      const userDocSnap = await getDoc(userDocRef);
+      const userDocSnap = await getDoc(userDocRef); // Get the latest profile
       if (!userDocSnap.exists()) {
         console.error("User profile not found for streak update.");
         return;
@@ -207,15 +205,10 @@ export default function JournalSessionPage() {
           if (newCurrentStreak >= milestone && !newMilestonesAchieved.includes(milestone)) {
             newMilestonesAchieved.push(milestone);
             milestoneReachedThisUpdate = milestone; 
-            showLocalNotification("You’re Doing Amazing 💫", {
-                body: `You've journaled for ${milestoneReachedThisUpdate} days in a row! Keep showing up for yourself.`,
-                icon: '/icons/icon-192x192.png',
-                tag: `milestone-${milestoneReachedThisUpdate}`
-            });
             break; 
           }
         }
-
+        
         const streakUpdates: Partial<UserProfile> = {
           currentStreak: newCurrentStreak,
           longestStreak: newLongestStreak,
@@ -223,6 +216,14 @@ export default function JournalSessionPage() {
           milestonesAchieved: newMilestonesAchieved,
         };
         await updateUserProfile(streakUpdates); 
+        
+        if(milestoneReachedThisUpdate) {
+            showLocalNotification("You’re Doing Amazing 💫", {
+                body: `You've journaled for ${milestoneReachedThisUpdate} days in a row! Keep showing up for yourself.`,
+                icon: '/icons/icon-192x192.png',
+                tag: `milestone-${milestoneReachedThisUpdate}`
+            });
+        }
         
         toast({ title: "Streak Updated!", description: `You're on a ${newCurrentStreak}-day streak! Keep it up! 🔥` });
         
@@ -235,7 +236,7 @@ export default function JournalSessionPage() {
   }, [user, refreshUserProfile, updateUserProfile, toast]);
 
   const processUserMessage = useCallback(async (userMessageText: string) => {
-    if (!userMessageText.trim() || !user || !refreshUserProfile) return;
+    if (!userMessageText.trim() || !user || !refreshUserProfile || !updateUserProfile) return;
 
     const userMessageData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
       text: userMessageText,
@@ -252,7 +253,7 @@ export default function JournalSessionPage() {
     try {
       let actualSessionId = currentDbSessionId;
 
-      if (!actualSessionId) {
+      if (!actualSessionId) { // First message in a new session
         const newSessionTitle = `Journal - ${new Date().toLocaleDateString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
         const sessionColRef = collection(db, 'users', user.uid, 'journalSessions');
         const newSessionDoc = await addDoc(sessionColRef, {
@@ -350,30 +351,30 @@ export default function JournalSessionPage() {
     } catch (error: any) {
       console.error("Error sending message or getting AI response:", error);
       toast({ title: "Error", description: error.message || "Could not process message.", variant: "destructive" });
-      setInput(userMessageText); // Restore input if send failed
-      setMessages(prev => prev.filter(m => m.id !== tempUserMessageId)); // Remove temporary user message
+      setInput(userMessageText); 
+      setMessages(prev => prev.filter(m => m.id !== tempUserMessageId)); 
     } finally {
       setIsLoadingAiResponse(false);
     }
-  }, [user, currentDbSessionId, currentTherapistMode, messages, handleStreakUpdate, refreshUserProfile, router, toast, updateUserProfile]);
+  }, [user, currentDbSessionId, currentTherapistMode, messages, handleStreakUpdate, refreshUserProfile, updateUserProfile, router, toast]);
 
 
-  const handleSendMessage = useCallback(async (e: FormEvent) => {
-    e.preventDefault();
-    await processUserMessage(input);
-    setInput(''); 
+  const handleSendMessage = useCallback(async (e?: FormEvent | React.KeyboardEvent<HTMLTextAreaElement> | React.MouseEvent<HTMLButtonElement>) => {
+    e?.preventDefault();
+    if (!input.trim()) return;
+
+    const textToSend = input;
+    setInput(''); // Clear input immediately for better UX
+    await processUserMessage(textToSend);
   }, [processUserMessage, input]);
 
   const handleSuggestionSelect = useCallback(async (messageId: string, suggestionText: string) => {
     if (!user || !currentDbSessionId) return;
     
-    // Optimistically update UI
     setMessages(prev => prev.map(m => m.id === messageId ? { ...m, suggestionSelected: true, suggestions: null } : m));
-    // Update Firestore
     const aiMessageRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId, 'messages', messageId);
     await updateDoc(aiMessageRef, { suggestionSelected: true, suggestions: null });
 
-    // Process the selected suggestion as a user message
     await processUserMessage(suggestionText);
   }, [user, currentDbSessionId, processUserMessage]);
 
@@ -389,7 +390,7 @@ export default function JournalSessionPage() {
         title: editableSessionTitle.trim(),
         lastUpdatedAt: serverTimestamp() 
       });
-      setSessionTitle(editableSessionTitle.trim()); // Update local state for display
+      setSessionTitle(editableSessionTitle.trim()); 
       toast({ title: "Session Renamed", description: "The session title has been updated." });
       setIsSessionSettingsOpen(false);
     } catch (error) {
@@ -408,7 +409,6 @@ export default function JournalSessionPage() {
       const sessionDocRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId);
       const messagesColRef = collection(db, 'users', user.uid, 'journalSessions', currentDbSessionId, 'messages');
       
-      // Delete all messages in subcollection
       const messagesSnapshot = await getDocs(messagesColRef);
       const batch = writeBatch(db);
       messagesSnapshot.forEach(docSnap => { 
@@ -416,7 +416,6 @@ export default function JournalSessionPage() {
       });
       await batch.commit();
 
-      // Delete the session document itself
       await deleteDoc(sessionDocRef);
 
       toast({ title: "Session Deleted", description: `The session titled "${sessionTitle}" and its messages have been removed.` });
@@ -441,11 +440,9 @@ export default function JournalSessionPage() {
       });
       toast({ title: "Goal Added!", description: `"${goalText}" has been added to your goals.` });
 
-      // Update the message in Firestore to mark the goal as added
       const messageRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId, 'messages', messageId);
       await updateDoc(messageRef, { isGoalAdded: true });
       
-      // Optimistically update local state (or rely on snapshot listener if performance allows)
       setMessages(prevMessages =>
         prevMessages.map(m =>
           m.id === messageId ? { ...m, isGoalAdded: true } : m
@@ -468,11 +465,9 @@ export default function JournalSessionPage() {
         });
         toast({ title: "Mind Shift Saved!", description: "Your reframed thought has been saved."});
 
-        // Update the message in Firestore
         const messageRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId, 'messages', messageId);
         await updateDoc(messageRef, { isReframingSaved: true });
 
-        // Optimistically update local state
         setMessages(prevMessages => 
             prevMessages.map(m => 
                 m.id === messageId ? { ...m, isReframingSaved: true } : m
@@ -501,8 +496,7 @@ export default function JournalSessionPage() {
   }
 
   return (
-    <Card className="flex flex-col h-[calc(100vh-4rem)] sm:h-[calc(100vh-3rem)] bg-card rounded-lg sm:rounded-xl lg:rounded-2xl shadow-xl overflow-hidden border">
-      {/* Header Section */}
+    <Card key={currentDbSessionId || 'new-session-card'} className="flex flex-col h-[calc(100vh-4rem)] sm:h-[calc(100vh-3rem)] bg-card rounded-lg sm:rounded-xl lg:rounded-2xl shadow-xl overflow-hidden border">
       <CardHeader className="flex flex-row items-center justify-between p-2 xs:p-3 sm:p-4 border-b bg-muted/30 gap-2">
         <div className="flex items-center gap-1 sm:gap-2 min-w-0 overflow-hidden">
           <Button variant="ghost" size="icon" asChild className="hover:bg-primary/10 shrink-0 h-8 w-8 sm:h-9 sm:w-9">
@@ -630,7 +624,7 @@ export default function JournalSessionPage() {
         </div>
       </CardHeader>
 
-      <ScrollArea className="flex-1" viewportRef={viewportRef} ref={scrollAreaRef}>
+      <ScrollArea className="flex-1" viewportRef={viewportRef}>
         <div className="p-3 xs:p-4">
           {messages.map((message) => (
             <ChatBubble
@@ -650,9 +644,9 @@ export default function JournalSessionPage() {
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex items-start gap-2 sm:gap-3 mr-auto my-4" 
+              className="group flex items-start gap-2 sm:gap-3 mr-auto my-4" 
             >
-              <Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0 shadow-sm border-2 border-background">
+              <Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0 shadow-md border-2 border-background">
                 <AvatarImage src="/logo-ai.png" alt="Mira AI" />
                 <AvatarFallback className="bg-muted text-primary text-xs">
                   <Brain className="h-4 w-4 sm:h-5 sm:w-5 animate-pulse" />
@@ -683,7 +677,7 @@ export default function JournalSessionPage() {
         </div>
       </ScrollArea>
 
-      <form onSubmit={handleSendMessage} className="border-t p-2 xs:p-3 bg-muted/30">
+      <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="border-t p-2 xs:p-3 bg-muted/30">
         <div className="relative flex items-center">
           <Textarea
             value={input}
@@ -694,7 +688,7 @@ export default function JournalSessionPage() {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                handleSendMessage(e);
+                handleSendMessage();
               }
             }}
           />
@@ -713,7 +707,8 @@ export default function JournalSessionPage() {
               <span className="sr-only">Voice Input</span>
             </Button>
             <Button 
-              type="submit" 
+              type="button" // Changed from "submit"
+              onClick={() => handleSendMessage()} // Call handleSendMessage directly
               size="icon" 
               disabled={isLoadingAiResponse || !input.trim()} 
               className="rounded-lg shadow-md h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9"
