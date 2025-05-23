@@ -36,7 +36,7 @@ export const GenerateDailyTopicContentOutputSchema = z.object({
   }).describe("Personalized responses based on aggregated scores from scale questions."),
   generalResource: z.object({
     text: z.string().describe("Descriptive text for a general resource related to the topic."),
-    link: z.string().url().optional().describe("An optional URL to an external resource. Should be a valid web address if provided."),
+    link: z.string().optional().describe("An optional URL to an external resource. Should be a valid web address if provided."),
   }).optional().describe("An optional general resource suggestion relevant to the topic."),
 });
 export type GenerateDailyTopicContentOutput = z.infer<typeof GenerateDailyTopicContentOutputSchema>;
