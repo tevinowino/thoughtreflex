@@ -1,3 +1,4 @@
+
 // src/ai/flows/generate-daily-topic-content-flow.ts
 'use server';
 /**
@@ -42,29 +43,29 @@ No specific user issues detected. Please choose a general but impactful mental w
 
 Topic Generation Guidelines:
 1.  **Topic Selection**:
-    *   If specific `detectedUserIssues` are provided, select a topic that is relevant and supportive for one of those issues. Examples:
+    *   If specific detectedUserIssues are provided, select a topic that is relevant and supportive for one of those issues. Examples:
         *   If "childhood trauma" is an issue: "Understanding Your Past, Empowering Your Present" or "Gentle Steps in Healing Early Wounds."
         *   If "body image": "Cultivating Self-Acceptance: Your Body, Your Ally."
         *   If "relationship anxiety": "Building Secure Connections."
     *   If no specific issues, choose a general mental wellness topic. Examples: "Finding Moments of Gratitude," "Building Resilience to Stress," "The Power of Self-Compassion," "Nurturing Healthy Boundaries," "Exploring Your Core Values," "Practicing Mindfulness in Daily Life."
     *   Avoid overly clinical or jargon-heavy topic names. Keep it inviting.
-2.  **`topicName`**: A concise and engaging name for the topic (3-7 words).
-3.  **`introduction`**: A warm, empathetic introduction from Mira (2-3 sentences) explaining the topic and its importance, inviting the user to reflect.
-4.  **`scaleQuestions`**: Generate exactly 3 to 5 unique scale-based questions.
-    *   Each question should have an `id` (e.g., "q1", "q2", "q3").
-    *   The `text` should be a statement the user rates on a 1-5 scale (e.g., "I feel confident in expressing my needs to others.").
-    *   Optionally, set `reverseScore: true` if a lower numerical score (e.g., 1 or 2) actually indicates a more positive or healthier stance for that specific question.
-5.  **`scoreRanges`**: Based on the aggregate score from the scale questions (assume 1-5 per question, so for 3 questions, total score is 3-15; for 5 questions, total 5-25).
-    *   **Low Range**: Define what constitutes a "low" score range. Provide a `miraResponse` (empathetic reflection for users scoring low), a `journalPrompt` (specific prompt tailored to their experience), and an optional `resourceSuggestion` (a small, actionable tip).
-    *   **Medium Range**: Define "medium" score range. Provide `miraResponse`, `journalPrompt`, and optional `resourceSuggestion`.
-    *   **High Range**: Define "high" score range. Provide `miraResponse`, `journalPrompt`, and optional `resourceSuggestion`.
+2.  **topicName**: A concise and engaging name for the topic (3-7 words).
+3.  **introduction**: A warm, empathetic introduction from Mira (2-3 sentences) explaining the topic and its importance, inviting the user to reflect.
+4.  **scaleQuestions**: Generate exactly 3 to 5 unique scale-based questions.
+    *   Each question should have an id (e.g., "q1", "q2", "q3").
+    *   The text should be a statement the user rates on a 1-5 scale (e.g., "I feel confident in expressing my needs to others.").
+    *   Optionally, set reverseScore: true if a lower numerical score (e.g., 1 or 2) actually indicates a more positive or healthier stance for that specific question.
+5.  **scoreRanges**: Based on the aggregate score from the scale questions (assume 1-5 per question, so for 3 questions, total score is 3-15; for 5 questions, total 5-25).
+    *   **Low Range**: Define what constitutes a "low" score range. Provide a miraResponse (empathetic reflection for users scoring low), a journalPrompt (specific prompt tailored to their experience), and an optional resourceSuggestion (a small, actionable tip).
+    *   **Medium Range**: Define "medium" score range. Provide miraResponse, journalPrompt, and optional resourceSuggestion.
+    *   **High Range**: Define "high" score range. Provide miraResponse, journalPrompt, and optional resourceSuggestion.
     *   Mira's responses for score ranges should be distinct, validating, and offer constructive next steps or reflections.
-6.  **`generalResource` (Optional)**: If applicable, provide a `text` description and an optional `link` (URL) to a general resource (e.g., a well-known website, a type of meditation to search for).
+6.  **generalResource** (Optional): If applicable, provide a text description and an optional link (URL) to a general resource (e.g., a well-known website, a type of meditation to search for).
 
 Ensure your output strictly adheres to the JSON schema for GenerateDailyTopicContentOutput.
 The AI should generate varied topics and questions each time, even if user context is similar, to keep it fresh.
 Focus on being supportive, insightful, and practical.
-Example question `id` format: "q1_selfworth", "q2_boundaries". Make them unique.
+Example question id format: "q1_selfworth", "q2_boundaries". Make them unique.
 `,
 });
 
@@ -90,4 +91,10 @@ const generateDailyTopicContentFlow = ai.defineFlow(
         scoreRanges: {
           low: { miraResponse: "It sounds like things might be a bit tough right now, and that's okay. Recognizing it is the first step.", journalPrompt: "What's one small thing you could do today to offer yourself a moment of comfort or kindness?", resourceSuggestion: "Try a 2-minute breathing exercise." },
           medium: { miraResponse: "It seems you're navigating things with some awareness. That's a good place to be. What feels most present for you?", journalPrompt: "What's one area you're doing well in, and one area you'd like to give a little more attention to?", resourceSuggestion: "Consider a short walk to clear your head." },
-          high: { miraResponse: "It's wonderful that you're feeling well-connected and managing things effectively! What's contributing to this positive state?", journalPrompt: "How can you continue to nurture this positive state? What's one way you can share this positive
+          high: { miraResponse: "It's wonderful that you're feeling well-connected and managing things effectively! What's contributing to this positive state?", journalPrompt: "How can you continue to nurture this positive state? What's one way you can share this positive energy with others or use it to further your goals?", resourceSuggestion: "Reflect on one success from the past week and how you achieved it." }
+        },
+      };
+    }
+    return output;
+  }
+);
