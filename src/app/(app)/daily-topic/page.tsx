@@ -40,7 +40,11 @@ export default function DailyTopicPage() {
         const topicData = userGeneratedTopics[todayDateString];
         setTodayTopicContent(topicData);
         if (topicData.completed && topicData.userAnswers) {
-          // If already completed and has userAnswers, calculate reflection based on saved scores
+          setScores(topicData.userAnswers.scores.reduce((acc, score, index) => {
+            const questionId = topicData.scaleQuestions[index]?.id;
+            if (questionId) acc[questionId] = score;
+            return acc;
+          }, {} as Record<string, number>));
           setMiraReflectionData(determineReflection(topicData, topicData.userAnswers.scores));
           setJournalEntry(topicData.userAnswers.userEntry || '');
           setCurrentStage('completed');
@@ -60,7 +64,7 @@ export default function DailyTopicPage() {
           const updatedProfilePart: Partial<UserProfile> = {
             dailyGeneratedTopics: {
               ...userGeneratedTopics,
-              [todayDateString]: { ...generatedTopic, completed: false, userAnswers: undefined },
+              [todayDateString]: { ...generatedTopic, completed: false, userAnswers: null }, // Changed undefined to null
             }
           };
           await updateUserProfile(updatedProfilePart);
@@ -76,22 +80,21 @@ export default function DailyTopicPage() {
     };
 
     loadOrGenerateTopic();
-  }, [user, authLoading, todayDateString, toast, updateUserProfile, refreshUserProfile]);
+  }, [user, authLoading, todayDateString, toast, updateUserProfile, refreshUserProfile]); // Removed determineReflection from deps
 
   const determineReflection = (topic: GenerateDailyTopicContentOutput, userScores: number[]): DailyTopicScoreRangeResponse => {
     let totalScore = 0;
     topic.scaleQuestions.forEach((q, index) => {
-      let score = userScores[index] || 0; // Default to 0 if score not found (shouldn't happen if all answered)
+      let score = userScores[index] || 0; 
       if (q.reverseScore) {
-        score = 6 - score; // Assuming 1-5 scale, reverse maps 1->5, 2->4, ..., 5->1
+        score = 6 - score; 
       }
       totalScore += score;
     });
     
     const numQuestions = topic.scaleQuestions.length;
-    // Example logic for score ranges, adjust as needed
-    const lowThreshold = numQuestions * 2; // e.g., 3q: 6, 4q: 8, 5q: 10
-    const mediumThreshold = numQuestions * 3 + Math.floor(numQuestions / 2) -1 ; // e.g., 3q: 9+1-1=9, 4q: 12+2-1=13, 5q: 15+2-1=16
+    const lowThreshold = numQuestions * 2; 
+    const mediumThreshold = numQuestions * 3 + Math.floor(numQuestions / 2) -1 ; 
 
     if (totalScore <= lowThreshold) {
       return topic.scoreRanges.low;
@@ -131,7 +134,7 @@ export default function DailyTopicPage() {
         scores: userScoresArray,
         miraResponse: miraReflectionData.miraResponse,
         journalPrompt: miraReflectionData.journalPrompt,
-        userEntry: journalEntry,
+        userEntry: journalEntry || null, // Ensure userEntry is null if empty
         completedAt: Timestamp.now(),
       };
 
@@ -179,7 +182,6 @@ export default function DailyTopicPage() {
     );
   }
 
-  // Check if currentStage is 'completed' and ensure miraReflectionData and userAnswers are available
   const completedTopicData = user?.dailyGeneratedTopics?.[todayDateString];
   if (currentStage === 'completed' && completedTopicData?.completed && completedTopicData?.userAnswers) {
     const reflectionForCompleted = miraReflectionData || determineReflection(completedTopicData, completedTopicData.userAnswers.scores);
