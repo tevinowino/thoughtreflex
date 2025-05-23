@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useAuth, UserProfile } from '@/contexts/auth-context';
-import { BookText, Target, Sparkles, CalendarCheck, Edit3, Loader2, Flame, ArrowRight, Smile, Meh, Frown, Save, Sunrise, CheckCircle, Clock, BookOpen } from 'lucide-react';
+import { BookText, Target, Sparkles, CalendarCheck, Edit3, Loader2, Flame, ArrowRight, Smile, Meh, Frown, Save, Sunrise, CheckCircle, Clock, BookOpen, Activity, Users, Brain } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
@@ -13,6 +13,9 @@ import { useToast } from '@/hooks/use-toast';
 import type { WeeklyRecap } from '../recaps/page'; 
 import { generateDailyAffirmation, GenerateDailyAffirmationOutput } from '@/ai/flows/generate-affirmation-flow';
 import { motion } from 'framer-motion';
+import { getDayOfWeek, getTopicForDay } from '@/lib/daily-topics';
+import type { DailyTopic } from '@/types/daily-topic';
+
 
 interface RecentJournal {
   id: string;
@@ -43,6 +46,8 @@ export default function DashboardPage() {
   const [loadingMood, setLoadingMood] = useState(true);
   const [dailyAffirmation, setDailyAffirmation] = useState<string | null>(null);
   const [loadingAffirmation, setLoadingAffirmation] = useState(true);
+  const [todaysGuidedTopic, setTodaysGuidedTopic] = useState<DailyTopic | null>(null);
+  const [isTopicCompletedToday, setIsTopicCompletedToday] = useState(false);
 
   const getTodayDateString = () => new Date().toISOString().split('T')[0];
 
@@ -59,6 +64,7 @@ export default function DashboardPage() {
       setCurrentDayMood(user.latestMood.mood);
       setLoadingMood(false);
     } else {
+      // Check Firestore if not in context (e.g. different browser/device)
       const moodDocRef = doc(db, 'users', user.uid, 'dailyMoods', todayDateStr);
       getDoc(moodDocRef).then(docSnap => {
         if (docSnap.exists()) {
@@ -90,10 +96,21 @@ export default function DashboardPage() {
         })
         .catch(err => {
           console.error("Error fetching daily affirmation:", err);
-          setDailyAffirmation("Remember to be kind to yourself today. Every step forward is progress."); // Fallback
+          setDailyAffirmation("Remember to be kind to yourself today. Every step forward is progress."); 
         })
         .finally(() => setLoadingAffirmation(false));
     }
+
+    // Fetch Daily Guided Topic
+    const currentDayIndex = new Date().getDay();
+    const topic = getTopicForDay(currentDayIndex);
+    setTodaysGuidedTopic(topic || null);
+    if (topic && user.lastDailyTopicCompletionDate === todayDateStr && user.dailyTopicResponses && user.dailyTopicResponses[todayDateStr]?.topic === topic.topicName) {
+      setIsTopicCompletedToday(true);
+    } else {
+      setIsTopicCompletedToday(false);
+    }
+
 
     setLoadingJournals(true);
     const journalsQuery = query(
@@ -111,7 +128,6 @@ export default function DashboardPage() {
       setLoadingJournals(false);
     }, (error) => {
       console.error("Error fetching recent journals:", error);
-      // toast({ title: "Error", description: "Could not load recent journals.", variant: "destructive" });
       setLoadingJournals(false);
     });
 
@@ -139,7 +155,6 @@ export default function DashboardPage() {
       }
     }, (error) => {
       console.error("Error fetching active goals:", error);
-      // toast({ title: "Error", description: "Could not load active goals.", variant: "destructive" });
       setLoadingGoals(false);
     });
     
@@ -180,11 +195,8 @@ export default function DashboardPage() {
     try {
       const dailyMoodDocRef = doc(db, 'users', user.uid, 'dailyMoods', todayDateStr);
       await setDoc(dailyMoodDocRef, { mood: mood, timestamp: serverTimestamp() }, { merge: true });
-      
-      // Optimistically update local state
       setCurrentDayMood(mood);
       
-      // Update main user profile in AuthContext and Firestore
       await updateUserProfile({ latestMood: { mood, date: todayDateStr } });
       if (refreshUserProfile) await refreshUserProfile();
 
@@ -236,7 +248,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-background/95 pb-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-10">
-        {/* Hero Welcome Section with improved visual impact */}
+        
         <motion.div 
           className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-background via-muted/50 to-background p-6 lg:p-10 shadow-xl border border-border/30"
           initial={{ opacity: 0, scale: 0.95 }}
@@ -265,7 +277,6 @@ export default function DashboardPage() {
           </div>
         </motion.div>
   
-        {/* Daily Affirmation Section with Visual Enhancement */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -288,10 +299,37 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </motion.div>
+
+        {/* Daily Guided Topic Card */}
+        {todaysGuidedTopic && (
+          <DashboardCard className="bg-card/90 backdrop-blur-sm">
+             <DashboardCardHeader 
+              title="Today's Guided Topic" 
+              description={`Focus: ${todaysGuidedTopic.topicName}`}
+              icon={<Brain className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-400" />} 
+            />
+            <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 pt-0 flex-grow flex flex-col justify-center items-center">
+              {isTopicCompletedToday ? (
+                 <div className="flex flex-col items-center gap-3 py-4">
+                    <CheckCircle className="h-10 w-10 text-green-500" />
+                    <p className="text-base text-foreground">You've completed today's topic!</p>
+                    <Button variant="outline" size="sm" asChild>
+                        <Link href="/daily-topic">Review Your Entry</Link>
+                    </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 py-4">
+                    <p className="text-center text-sm text-muted-foreground">{todaysGuidedTopic.introduction.substring(0,150)}...</p>
+                    <Button asChild size="sm" className="mt-2">
+                        <Link href="/daily-topic">Start Topic</Link>
+                    </Button>
+                </div>
+              )}
+            </CardContent>
+          </DashboardCard>
+        )}
   
-        {/* Main Dashboard Content with Better Grid Layout */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
-          {/* Daily Mood Card with Improved UX */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-5 sm:gap-6">
           <DashboardCard className="bg-card/90 backdrop-blur-sm">
             <DashboardCardHeader 
               title="Daily Mood" 
@@ -338,7 +376,6 @@ export default function DashboardPage() {
             </CardFooter>
           </DashboardCard>
   
-          {/* Journaling Streak Card with Visual Impact */}
           <DashboardCard className="bg-card/90 backdrop-blur-sm">
             <DashboardCardHeader 
               title="Journaling Streak" 
@@ -366,11 +403,7 @@ export default function DashboardPage() {
               <p className="text-xs text-center text-muted-foreground w-full">Journal daily to build and maintain your streak</p>
             </CardFooter>
           </DashboardCard>
-        </div>
-  
-        {/* Recent Journals and Active Goals */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
-          {/* Recent Journals with Improved List Design */}
+
           <DashboardCard className="bg-card/90 backdrop-blur-sm">
             <DashboardCardHeader 
               title="Recent Journals" 
@@ -413,7 +446,6 @@ export default function DashboardPage() {
             </CardFooter>
           </DashboardCard>
   
-          {/* Active Goals with Improved Visual Design */}
           <DashboardCard className="bg-card/90 backdrop-blur-sm">
             <DashboardCardHeader 
               title="Active Goals" 
@@ -441,7 +473,7 @@ export default function DashboardPage() {
                   <Target className="h-10 w-10 text-muted-foreground/40" />
                   <p className="text-center text-sm text-muted-foreground">Set your first goal to get started!</p>
                   <Button variant="outline" size="sm" asChild>
-                    <Link href="/goals/new">Add Goal</Link>
+                    <Link href="/goals">Add Goal</Link>
                   </Button>
                 </div>
               )}
@@ -454,9 +486,7 @@ export default function DashboardPage() {
           </DashboardCard>
         </div>
   
-        {/* Weekly Review and Insights Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
-          {/* Weekly Review with Better UI */}
           <DashboardCard className="bg-card/90 backdrop-blur-sm lg:col-span-1">
             <DashboardCardHeader 
               title="Weekly Review" 
@@ -491,7 +521,6 @@ export default function DashboardPage() {
             </CardFooter>
           </DashboardCard>
   
-          {/* Discover Insights with Enhanced Design */}
           <DashboardCard className="bg-card/90 backdrop-blur-sm lg:col-span-2">
             <DashboardCardHeader 
               title="Discover Insights" 
@@ -512,17 +541,14 @@ export default function DashboardPage() {
                 </div>
                 <div className="w-full md:w-1/3 lg:w-2/5 flex-shrink-0">
                   <Image 
-                    src="/insights.png" 
+                    src="/images/insights/insights-visualization.png"
                     alt="Abstract visualization representing personal insights" 
                     width={300} 
                     height={200} 
                     className="rounded-xl shadow-lg object-cover w-full h-auto hover:shadow-xl transition-all hover:-translate-y-1 duration-300"
+                    data-ai-hint="digital brain connection"
                   />
                 </div>
               </div>
             </CardContent>
-          </DashboardCard>
-        </div>
-      </div>
-    </div>
-  )}
+          </Dashboard

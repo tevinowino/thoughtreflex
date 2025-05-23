@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { User as FirebaseUser, AuthError } from 'firebase/auth';
@@ -29,12 +28,28 @@ export interface UserProfile {
   currentStreak?: number;
   longestStreak?: number;
   lastJournalDate?: string; // Store as YYYY-MM-DD string
-  mbtiType?: string | null; // e.g., "INFJ", "ESTP", allow null
+  mbtiType?: string | null; 
   latestMood?: {
     mood: 'positive' | 'neutral' | 'negative';
     date: string; // YYYY-MM-DD
-    notes?: string;
-  } | null; // Allow null
+  } | null;
+  detectedIssues?: { // For Emotional Pattern Detection
+    [key: string]: {
+      occurrences: number;
+      lastDetected: Timestamp;
+    };
+  } | null;
+  lastDailyTopicCompletionDate?: string; // YYYY-MM-DD
+  dailyTopicResponses?: { // To store detailed responses for each day
+    [date: string]: { // YYYY-MM-DD
+      topic: string;
+      scores: number[];
+      miraResponse: string;
+      journalPrompt: string;
+      userEntry?: string; // User's journal entry for the topic
+      completedAt: Timestamp;
+    }
+  } | null;
 }
 
 interface AuthContextType {
@@ -65,27 +80,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const profileData = userDocSnap.data();
       setUser({
         ...profileData,
-        // Ensure optional fields default to null if they are missing from Firestore
+        uid: firebaseUser.uid, // Always ensure uid is from auth
+        email: firebaseUser.email || profileData.email || null,
+        displayName: firebaseUser.displayName || profileData.displayName || null,
+        photoURL: firebaseUser.photoURL || profileData.photoURL || null,
         mbtiType: profileData.mbtiType || null,
         latestMood: profileData.latestMood || null,
-        photoURL: profileData.photoURL || null,
-        displayName: profileData.displayName || null,
+        detectedIssues: profileData.detectedIssues || null,
+        lastDailyTopicCompletionDate: profileData.lastDailyTopicCompletionDate || null,
+        dailyTopicResponses: profileData.dailyTopicResponses || null,
       } as UserProfile);
     } else {
-      // This block might be hit if Firestore doc creation failed previously,
-      // or for a very new user before handleAuthSuccess fully completes.
-      // We'll primarily rely on handleAuthSuccess to create the initial doc.
       const newUserProfile: UserProfile = {
         uid: firebaseUser.uid,
-        email: firebaseUser.email || null,
-        displayName: firebaseUser.displayName || null,
-        photoURL: firebaseUser.photoURL || null,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+        photoURL: firebaseUser.photoURL,
         defaultTherapistMode: 'Therapist',
         currentStreak: 0,
         longestStreak: 0,
         lastJournalDate: '',
         mbtiType: null,
         latestMood: null,
+        detectedIssues: null,
+        lastDailyTopicCompletionDate: null,
+        dailyTopicResponses: null,
       };
       await setDoc(userDocRef, newUserProfile, { merge: true });
       setUser(newUserProfile);
@@ -117,52 +136,57 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const userDocRef = doc(db, 'users', firebaseUser.uid);
     const userDocSnap = await getDoc(userDocRef);
     let userProfileData: UserProfile;
+    const initialDisplayName = displayNameParam || firebaseUser.displayName || null;
+    const initialPhotoURL = firebaseUser.photoURL || null;
 
     if (userDocSnap.exists()) {
       const existingProfile = userDocSnap.data() as UserProfile;
       userProfileData = {
         ...existingProfile,
-        uid: firebaseUser.uid, // ensure uid is from auth user
+        uid: firebaseUser.uid, 
         email: firebaseUser.email || null,
-        displayName: displayNameParam || firebaseUser.displayName || existingProfile.displayName || null,
-        photoURL: firebaseUser.photoURL || existingProfile.photoURL || null,
+        displayName: initialDisplayName || existingProfile.displayName || null,
+        photoURL: initialPhotoURL || existingProfile.photoURL || null,
         defaultTherapistMode: existingProfile.defaultTherapistMode || 'Therapist',
         currentStreak: existingProfile.currentStreak || 0,
         longestStreak: existingProfile.longestStreak || 0,
         lastJournalDate: existingProfile.lastJournalDate || '',
         mbtiType: existingProfile.mbtiType || null,
         latestMood: existingProfile.latestMood || null,
+        detectedIssues: existingProfile.detectedIssues || null,
+        lastDailyTopicCompletionDate: existingProfile.lastDailyTopicCompletionDate || null,
+        dailyTopicResponses: existingProfile.dailyTopicResponses || null,
       };
     } else {
-      // New user profile
       userProfileData = {
         uid: firebaseUser.uid,
         email: firebaseUser.email || null,
-        displayName: displayNameParam || firebaseUser.displayName || null,
-        photoURL: firebaseUser.photoURL || null,
+        displayName: initialDisplayName,
+        photoURL: initialPhotoURL,
         defaultTherapistMode: 'Therapist',
         currentStreak: 0,
         longestStreak: 0,
         lastJournalDate: '',
         mbtiType: null,
         latestMood: null,
+        detectedIssues: null,
+        lastDailyTopicCompletionDate: null,
+        dailyTopicResponses: null,
       };
     }
     
-    // Update Firebase Auth profile if necessary (displayName or photoURL might come from Google)
     const authProfileUpdates: { displayName?: string | null; photoURL?: string | null } = {};
-    if (userProfileData.displayName && auth.currentUser && auth.currentUser.displayName !== userProfileData.displayName) {
+    if (userProfileData.displayName && (!auth.currentUser?.displayName || auth.currentUser.displayName !== userProfileData.displayName)) {
       authProfileUpdates.displayName = userProfileData.displayName;
     }
-    if (userProfileData.photoURL !== undefined && auth.currentUser && auth.currentUser.photoURL !== userProfileData.photoURL) {
+    if (userProfileData.photoURL !== undefined && (!auth.currentUser?.photoURL || auth.currentUser.photoURL !== userProfileData.photoURL)) {
        authProfileUpdates.photoURL = userProfileData.photoURL;
     }
     if (auth.currentUser && Object.keys(authProfileUpdates).length > 0) {
         await updateFirebaseProfile(auth.currentUser, authProfileUpdates);
     }
     
-
-    await setDoc(userDocRef, userProfileData, { merge: true }); // merge: true is safer
+    await setDoc(userDocRef, userProfileData, { merge: true });
     setUser(userProfileData);
     setError(null);
     router.push('/dashboard');
@@ -194,7 +218,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await handleAuthSuccess(result.user, displayName);
     } catch (err) {
       handleAuthError(err as AuthError);
-      throw err; // Re-throw for form to catch
+      throw err; 
     } finally {
       setLoading(false);
     }
@@ -207,7 +231,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await handleAuthSuccess(result.user);
     } catch (err) {
       handleAuthError(err as AuthError);
-      throw err; // Re-throw for form to catch
+      throw err; 
     } finally {
       setLoading(false);
     }
@@ -229,8 +253,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const updateUserProfile = async (details: Partial<UserProfile>) => {
     if (!user || !auth.currentUser) {
-      setError({ code: 'auth/no-current-user', message: 'No user is currently signed in.' } as AuthError);
-      return;
+      const noUserError = { code: 'auth/no-current-user', message: 'No user is currently signed in.' } as AuthError
+      setError(noUserError);
+      throw noUserError;
     }
     setLoading(true);
     try {
@@ -241,23 +266,50 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         authProfileUpdates.displayName = details.displayName;
       }
       if (details.photoURL !== undefined && details.photoURL !== auth.currentUser.photoURL) { 
-         authProfileUpdates.photoURL = details.photoURL;
+         authProfileUpdates.photoURL = details.photoURL === '' ? null : details.photoURL;
       }
       if (Object.keys(authProfileUpdates).length > 0) {
         await updateFirebaseProfile(auth.currentUser, authProfileUpdates);
       }
       
-      // Ensure undefined values are converted to null for Firestore
       const firestoreSafeDetails: Partial<UserProfile> = {};
       for (const key in details) {
         if (Object.prototype.hasOwnProperty.call(details, key)) {
           const k = key as keyof UserProfile;
+          // Firestore cannot store 'undefined', so convert to 'null'
           firestoreSafeDetails[k] = details[k] === undefined ? null : details[k];
         }
       }
+      // Ensure nested objects like detectedIssues are merged correctly
+      if (details.detectedIssues) {
+        firestoreSafeDetails.detectedIssues = {
+          ...(user.detectedIssues || {}), // Spread existing issues
+          ...details.detectedIssues, // Spread new/updated issues
+        };
+        // Now handle incrementing occurrences within the merged object
+        for (const issueKey in details.detectedIssues) {
+          if (user.detectedIssues && user.detectedIssues[issueKey] && details.detectedIssues[issueKey].occurrences === 1) {
+            // If issue exists and we are adding an occurrence (passed as 1 for simplicity from client)
+             firestoreSafeDetails.detectedIssues[issueKey].occurrences = (user.detectedIssues[issueKey].occurrences || 0) + 1;
+          } else if (!user.detectedIssues || !user.detectedIssues[issueKey]) {
+            // New issue
+            firestoreSafeDetails.detectedIssues[issueKey].occurrences = 1;
+          }
+          // lastDetected is handled directly by the incoming details
+        }
+      }
+
 
       await updateDoc(userDocRef, firestoreSafeDetails);
-      setUser(prevUser => prevUser ? { ...prevUser, ...firestoreSafeDetails } : null);
+      
+      // Fetch the updated document to ensure the local state is perfectly in sync
+      const updatedDocSnap = await getDoc(userDocRef);
+      if (updatedDocSnap.exists()) {
+        setUser(updatedDocSnap.data() as UserProfile);
+      } else {
+         // Fallback or error, though unlikely if updateDoc succeeded
+        setUser(prevUser => prevUser ? { ...prevUser, ...firestoreSafeDetails } : null);
+      }
       setError(null);
     } catch (err) {
       handleAuthError(err as AuthError);
@@ -269,7 +321,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const deleteUserData = async (currentPassword?: string) => {
     if (!user || !auth.currentUser) {
-      throw new Error('No user is currently signed in.');
+      const noUserError = { code: 'auth/no-current-user', message: 'No user is currently signed in.' } as AuthError;
+      setError(noUserError);
+      throw noUserError;
     }
     setLoading(true);
     setError(null);
@@ -278,7 +332,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const currentUser = auth.currentUser;
       if (currentUser.providerData.some(p => p.providerId === EmailAuthProvider.PROVIDER_ID)) {
         if (!currentPassword) {
-          throw new Error('Current password is required for re-authentication.');
+          throw { code: 'auth/missing-password', message: 'Current password is required for re-authentication.' };
         }
         const credential = EmailAuthProvider.credential(currentUser.email!, currentPassword);
         await reauthenticateWithCredential(currentUser, credential);
@@ -286,7 +340,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const provider = new GoogleAuthProvider();
         await reauthenticateWithPopup(currentUser, provider);
       } else {
-        throw new Error('Re-authentication method not supported for this user.');
+        throw { code: 'auth/reauthentication-not-supported', message: 'Re-authentication method not supported for this user.' };
       }
 
       const batch = writeBatch(db);
@@ -306,13 +360,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       
       const userDocRef = doc(db, 'users', user.uid);
-      // Delete old profile then set a new one, or just set with overwrite?
-      // For a "reset", it's cleaner to delete then set, but set with merge:false would also work if all fields are provided.
-      // Given we are deleting subcollections, deleting the main doc then recreating ensures a truly fresh start.
-      batch.delete(userDocRef); // Delete old profile doc
-      await batch.commit(); // Commit deletions first
+      batch.delete(userDocRef); 
+      await batch.commit(); 
 
-      // Re-initialize user profile in Firestore
       const freshUserProfile: UserProfile = {
         uid: currentUser.uid,
         email: currentUser.email || null,
@@ -324,6 +374,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         lastJournalDate: '',
         mbtiType: null,
         latestMood: null,
+        detectedIssues: null,
+        lastDailyTopicCompletionDate: null,
+        dailyTopicResponses: null,
       };
       await setDoc(userDocRef, freshUserProfile); 
       setUser(freshUserProfile);
