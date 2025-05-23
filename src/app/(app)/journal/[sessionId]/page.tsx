@@ -1,4 +1,3 @@
-
 // src/app/(app)/journal/[sessionId]/page.tsx
 'use client';
 
@@ -7,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ImageIcon, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, Save } from 'lucide-react';
+import { Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, Save } from 'lucide-react';
 import { useAuth, UserProfile } from '@/contexts/auth-context'; 
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -24,8 +23,9 @@ import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Label } from '@/components/ui/label';
-import { differenceInDays, format } from 'date-fns';
+import { differenceInDays, format, parseISO } from 'date-fns';
 import { showLocalNotification } from '@/components/app/notification-manager';
+import SuggestionButtons from '@/components/app/suggestion-buttons';
 
 
 interface Message {
@@ -39,6 +39,8 @@ interface Message {
   isGoalAdded?: boolean;
   reframingData?: ReframeThoughtOutput | null;
   isReframingSaved?: boolean;
+  suggestions?: string[] | null; // For quick tap replies
+  suggestionSelected?: boolean; // To disable buttons after one is tapped
 }
 
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
@@ -90,9 +92,14 @@ export default function JournalSessionPage() {
 
       try {
         let daysSinceLastEntry: number | undefined = undefined;
-        if (user.lastJournalDate) {
-          daysSinceLastEntry = differenceInDays(new Date(), parseISO(user.lastJournalDate));
+        if (user.lastJournalDate && user.lastJournalDate.length > 0) { // Check if lastJournalDate is not an empty string
+            try {
+                daysSinceLastEntry = differenceInDays(new Date(), parseISO(user.lastJournalDate));
+            } catch (e) {
+                console.warn("Could not parse lastJournalDate:", user.lastJournalDate, e);
+            }
         }
+
 
         let activeGoalText: string | undefined = undefined;
         const goalsQuery = query(collection(db, 'users', user.uid, 'goals'), where('isCompleted', '==', false), orderBy('createdAt', 'desc'), limit(1));
@@ -174,7 +181,6 @@ export default function JournalSessionPage() {
     if (!user || !refreshUserProfile) return;
 
     try {
-      // Fetch the most up-to-date profile to avoid race conditions with streaks
       const userDocRef = doc(db, 'users', user.uid);
       const userDocSnap = await getDoc(userDocRef);
       if (!userDocSnap.exists()) {
@@ -190,7 +196,7 @@ export default function JournalSessionPage() {
       if (lastJournalDateString !== todayDateString) {
         let newCurrentStreak = currentProfile.currentStreak || 0;
         let newLongestStreak = currentProfile.longestStreak || 0;
-        let newMilestonesAchieved = currentProfile.milestonesAchieved || [];
+        let newMilestonesAchieved = [...(currentProfile.milestonesAchieved || [])];
 
         if (lastJournalDateString) {
           const yesterday = new Date(today);
@@ -210,14 +216,14 @@ export default function JournalSessionPage() {
           newLongestStreak = newCurrentStreak;
         }
 
-        const streakMilestones = [3, 7, 14, 30, 50, 100, 365]; // Define milestones
+        const streakMilestones = [3, 7, 14, 30, 50, 100, 365]; 
         let milestoneReachedThisUpdate: number | null = null;
 
         for (const milestone of streakMilestones) {
           if (newCurrentStreak >= milestone && !newMilestonesAchieved.includes(milestone)) {
             newMilestonesAchieved.push(milestone);
-            milestoneReachedThisUpdate = milestone; // Track the specific milestone reached
-            break; // Celebrate one milestone at a time
+            milestoneReachedThisUpdate = milestone; 
+            break; 
           }
         }
 
@@ -227,7 +233,7 @@ export default function JournalSessionPage() {
           lastJournalDate: todayDateString, 
           milestonesAchieved: newMilestonesAchieved,
         };
-        await updateUserProfile(streakUpdates); // This calls the context's updateUserProfile
+        await updateUserProfile(streakUpdates); 
         
         toast({ title: "Streak Updated!", description: `You're on a ${newCurrentStreak}-day streak! Keep it up! 🔥` });
         
@@ -238,6 +244,8 @@ export default function JournalSessionPage() {
                 tag: `milestone-${milestoneReachedThisUpdate}`
             });
         }
+        // Call refreshUserProfile *after* updateUserProfile completes to ensure the context has the latest data
+        await refreshUserProfile();
       }
     } catch (error) {
       console.error("Error updating streak:", error);
@@ -245,20 +253,15 @@ export default function JournalSessionPage() {
     }
   };
 
+  const processUserMessage = async (userMessageText: string) => {
+    if (!userMessageText.trim() || !user || !refreshUserProfile) return;
 
-  const handleSendMessage = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || !user || !refreshUserProfile) return;
-
-    const userMessageText = input;
-    setInput(''); 
-
-    const userMessageData: Omit<Message, 'id' | 'timestamp'> & { timestamp: any } = { 
+    const userMessageData: Omit<Message, 'id' | 'timestamp'> & { timestamp: any } = {
       text: userMessageText,
       sender: 'user',
       timestamp: serverTimestamp(),
       name: user.displayName || 'User',
-      avatar: user.photoURL || null, 
+      avatar: user.photoURL || null,
     };
 
     setIsLoadingAiResponse(true);
@@ -267,7 +270,7 @@ export default function JournalSessionPage() {
 
     try {
       let actualSessionId = currentDbSessionId;
-      
+
       if (!actualSessionId) {
         const newSessionTitle = `Journal - ${new Date().toLocaleDateString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
         const sessionColRef = collection(db, 'users', user.uid, 'journalSessions');
@@ -286,36 +289,36 @@ export default function JournalSessionPage() {
       }
 
       const userMsgRef = await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), userMessageData);
-      setMessages(prev => prev.map(m => m.id === tempUserMessageId ? {...m, id: userMsgRef.id} : m));
-      
+      setMessages(prev => prev.map(m => m.id === tempUserMessageId ? { ...m, id: userMsgRef.id } : m));
+
       await handleStreakUpdate();
 
       let activeGoalText: string | undefined = undefined;
       const goalsQuery = query(collection(db, 'users', user.uid, 'goals'), where('isCompleted', '==', false), orderBy('createdAt', 'desc'), limit(1));
       const goalsSnapshot = await getDocs(goalsQuery);
       if (!goalsSnapshot.empty) {
-          activeGoalText = goalsSnapshot.docs[0].data().text;
+        activeGoalText = goalsSnapshot.docs[0].data().text;
       }
-
-      const historySnapshot = messages.slice(-MAX_HISTORY_MESSAGES -1, -1); // Get up to last 10 messages *before* current user message
+      
+      const historySnapshot = messages.filter(msg => msg.id !== tempUserMessageId).slice(-MAX_HISTORY_MESSAGES);
       const historyForAI: AiChatMessage[] = historySnapshot
         .map(msg => ({ sender: msg.sender, text: msg.text }));
-      historyForAI.push({ sender: 'user', text: userMessageText }); // Add current user message
+      historyForAI.push({ sender: 'user', text: userMessageText });
 
       let detectedIssuesSummary: string | undefined = undefined;
       if (user.detectedIssues && Object.keys(user.detectedIssues).length > 0) {
-          detectedIssuesSummary = "User patterns include: " + Object.entries(user.detectedIssues)
-            .map(([key, val]) => `${key} (${val.occurrences} mentions)`)
-            .join(', ') + ".";
+        detectedIssuesSummary = "User patterns include: " + Object.entries(user.detectedIssues)
+          .map(([key, val]) => `${key} (${val.occurrences} mentions)`)
+          .join(', ') + ".";
       }
-      
+
       const aiFlowInput: TherapistModeInput = {
         userInput: userMessageText,
         mode: currentTherapistMode,
         goal: activeGoalText,
         messageHistory: historyForAI,
-        mbtiType: user?.mbtiType || undefined,
-        userName: user.displayName || undefined,
+        mbtiType: user?.mbtiType || null,
+        userName: user.displayName || null,
         detectedIssuesSummary: detectedIssuesSummary,
       };
 
@@ -331,6 +334,8 @@ export default function JournalSessionPage() {
         isGoalAdded: false,
         reframingData: aiResponse.reframingData || null,
         isReframingSaved: false,
+        suggestions: aiResponse.suggestedReplies || null,
+        suggestionSelected: false,
       };
       await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), aiMessageData);
 
@@ -347,30 +352,48 @@ export default function JournalSessionPage() {
         });
         if (issuesUpdated) {
           await updateUserProfile({ detectedIssues: newDetectedIssues });
+          await refreshUserProfile();
         }
       }
-
 
       const sessionUpdateData: { lastUpdatedAt: any, firstMessagePreview?: string } = {
         lastUpdatedAt: serverTimestamp(),
       };
       const currentSessionMessages = await getDocs(query(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), where('sender', '==', 'user'), orderBy('timestamp', 'asc'), limit(1)));
       if (currentSessionMessages.docs.length === 1 && currentSessionMessages.docs[0].id === userMsgRef.id) {
-          sessionUpdateData.firstMessagePreview = userMessageText.substring(0, 100);
+        sessionUpdateData.firstMessagePreview = userMessageText.substring(0, 100);
       }
 
       await updateDoc(doc(db, 'users', user.uid, 'journalSessions', actualSessionId!), sessionUpdateData);
-      if (refreshUserProfile) await refreshUserProfile();
 
     } catch (error: any) {
       console.error("Error sending message or getting AI response:", error);
       toast({ title: "Error", description: error.message || "Could not process message.", variant: "destructive" });
-      setInput(userMessageText); 
-      setMessages(prev => prev.filter(m => m.id !== tempUserMessageId)); 
+      setInput(userMessageText);
+      setMessages(prev => prev.filter(m => m.id !== tempUserMessageId));
     } finally {
       setIsLoadingAiResponse(false);
     }
   };
+
+
+  const handleSendMessage = async (e: FormEvent) => {
+    e.preventDefault();
+    await processUserMessage(input);
+    setInput(''); 
+  };
+
+  const handleSuggestionSelect = async (messageId: string, suggestionText: string) => {
+    if (!user || !currentDbSessionId) return;
+    
+    // Disable suggestions for this message locally and in Firestore
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, suggestionSelected: true, suggestions: null } : m));
+    const aiMessageRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId, 'messages', messageId);
+    await updateDoc(aiMessageRef, { suggestionSelected: true, suggestions: null });
+
+    await processUserMessage(suggestionText);
+  };
+
 
   const handleSaveSessionTitle = async () => {
     if (!currentDbSessionId || !user || !editableSessionTitle.trim()) {
@@ -483,7 +506,7 @@ export default function JournalSessionPage() {
     Friend: <Smile className="mr-2 h-4 w-4" />,
   };
 
-  const ChatBubble = ({ message, handleAddSuggestedGoal, handleSaveMindShift }: { message: Message, handleAddSuggestedGoal: Function, handleSaveMindShift: Function}) => {
+  const ChatBubble = ({ message }: { message: Message }) => {
     const isUserMessage = message.sender === 'user';
     const timestamp = message.timestamp instanceof Date 
       ? message.timestamp 
@@ -533,6 +556,14 @@ export default function JournalSessionPage() {
             </p>
           </div>
   
+          {!isUserMessage && message.suggestions && message.suggestions.length > 0 && !message.suggestionSelected && (
+            <SuggestionButtons
+              suggestions={message.suggestions}
+              onSelect={(suggestion) => handleSuggestionSelect(message.id, suggestion)}
+              disabled={isLoadingAiResponse}
+            />
+          )}
+
           {!isUserMessage && message.suggestedGoalText && (
             <motion.div 
               initial={{ opacity: 0, height: 0 }}
@@ -690,7 +721,7 @@ export default function JournalSessionPage() {
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel onClick={() => setIsDeletingSession(false)}>Cancel</AlertDialogCancel>
                       <AlertDialogAction 
                         onClick={handleDeleteSession} 
                         className={cn(buttonVariants({ variant: "destructive" }))} 
@@ -733,8 +764,6 @@ export default function JournalSessionPage() {
             <ChatBubble 
               key={message.id}
               message={message}
-              handleAddSuggestedGoal={handleAddSuggestedGoal}
-              handleSaveMindShift={handleSaveMindShift}
             />
           ))}
           
@@ -791,18 +820,7 @@ export default function JournalSessionPage() {
             }}
           />
           <div className="absolute right-1 xs:right-1.5 sm:right-2 top-1/2 -translate-y-1/2 flex gap-0.5 sm:gap-1">
-             <Dialog> {/* Placeholder for Image Prompt Dialog - Not implemented in this step */}
-              <DialogTrigger asChild>
-                <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-primary h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9"
-                 onClick={() => toast({ title: "Feature Coming Soon!", description: "AI Visual Prompts will be available later."})}
-                >
-                  <ImageIcon className="h-3.5 w-3.5 xs:h-4 xs:w-4 sm:h-5 sm:w-5" />
-                  <span className="sr-only">Visual Prompt</span>
-                </Button>
-              </DialogTrigger>
-              {/* <DialogContent> ... </DialogContent> */}
-            </Dialog>
-            <Button 
+             <Button 
               type="button" 
               variant="ghost" 
               size="icon" 
@@ -827,5 +845,6 @@ export default function JournalSessionPage() {
           </div>
         </div>
       </form>
-    </Card>  );
+    </Card>  
+  );
 }
