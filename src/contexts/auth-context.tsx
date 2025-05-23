@@ -1,3 +1,4 @@
+// src/contexts/auth-context.tsx
 'use client';
 
 import type { User as FirebaseUser, AuthError } from 'firebase/auth';
@@ -18,6 +19,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc, Timestamp, collection, getDocs, writeBatch, deleteDoc as deleteFirestoreDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
+import type { GenerateDailyTopicContentOutput } from '@/ai/core/daily-topic-content-schemas'; // For daily generated topics
 
 export interface UserProfile {
   uid: string;
@@ -28,29 +30,31 @@ export interface UserProfile {
   currentStreak?: number;
   longestStreak?: number;
   lastJournalDate?: string; // Store as YYYY-MM-DD string
-  mbtiType?: string | null; 
+  mbtiType?: string | null;
   latestMood?: {
     mood: 'positive' | 'neutral' | 'negative';
     date: string; // YYYY-MM-DD
   } | null;
-  detectedIssues?: { // For Emotional Pattern Detection
+  detectedIssues?: {
     [key: string]: {
       occurrences: number;
       lastDetected: Timestamp;
     };
   } | null;
-  lastDailyTopicCompletionDate?: string; // YYYY-MM-DD
-  dailyTopicResponses?: { // To store detailed responses for each day
-    [date: string]: { // YYYY-MM-DD
-      topic: string;
-      scores: number[];
-      miraResponse: string;
-      journalPrompt: string;
-      userEntry?: string; // User's journal entry for the topic
-      completedAt: Timestamp;
-    }
+  dailyGeneratedTopics?: { // Stores AI-generated topic content for each day
+    [date: string]: GenerateDailyTopicContentOutput & { // YYYY-MM-DD
+      completed?: boolean;
+      userAnswers?: { // Store user's actual responses to this specific generated topic
+        scores: number[];
+        userEntry?: string;
+        completedAt: Timestamp;
+      };
+    };
   } | null;
+  lastDailyTopicCompletionDate?: string; // YYYY-MM-DD // Tracks if user completed any topic on this date
+  // Old dailyTopicUserAnswers is effectively merged into dailyGeneratedTopics.userAnswers
 }
+
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -79,23 +83,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (userDocSnap.exists()) {
       const profileData = userDocSnap.data();
       setUser({
-        ...profileData,
         uid: firebaseUser.uid, // Always ensure uid is from auth
         email: firebaseUser.email || profileData.email || null,
         displayName: firebaseUser.displayName || profileData.displayName || null,
         photoURL: firebaseUser.photoURL || profileData.photoURL || null,
+        defaultTherapistMode: profileData.defaultTherapistMode || 'Therapist',
+        currentStreak: profileData.currentStreak || 0,
+        longestStreak: profileData.longestStreak || 0,
+        lastJournalDate: profileData.lastJournalDate || '',
         mbtiType: profileData.mbtiType || null,
         latestMood: profileData.latestMood || null,
         detectedIssues: profileData.detectedIssues || null,
+        dailyGeneratedTopics: profileData.dailyGeneratedTopics || null,
         lastDailyTopicCompletionDate: profileData.lastDailyTopicCompletionDate || null,
-        dailyTopicResponses: profileData.dailyTopicResponses || null,
       } as UserProfile);
     } else {
+      // New user profile creation
       const newUserProfile: UserProfile = {
         uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName,
-        photoURL: firebaseUser.photoURL,
+        email: firebaseUser.email || null,
+        displayName: firebaseUser.displayName || null,
+        photoURL: firebaseUser.photoURL || null,
         defaultTherapistMode: 'Therapist',
         currentStreak: 0,
         longestStreak: 0,
@@ -103,8 +111,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         mbtiType: null,
         latestMood: null,
         detectedIssues: null,
+        dailyGeneratedTopics: null,
         lastDailyTopicCompletionDate: null,
-        dailyTopicResponses: null,
       };
       await setDoc(userDocRef, newUserProfile, { merge: true });
       setUser(newUserProfile);
@@ -136,6 +144,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const userDocRef = doc(db, 'users', firebaseUser.uid);
     const userDocSnap = await getDoc(userDocRef);
     let userProfileData: UserProfile;
+
     const initialDisplayName = displayNameParam || firebaseUser.displayName || null;
     const initialPhotoURL = firebaseUser.photoURL || null;
 
@@ -145,17 +154,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         ...existingProfile,
         uid: firebaseUser.uid, 
         email: firebaseUser.email || null,
-        displayName: initialDisplayName || existingProfile.displayName || null,
-        photoURL: initialPhotoURL || existingProfile.photoURL || null,
+        displayName: initialDisplayName === undefined ? existingProfile.displayName : initialDisplayName,
+        photoURL: initialPhotoURL === undefined ? existingProfile.photoURL : initialPhotoURL,
         defaultTherapistMode: existingProfile.defaultTherapistMode || 'Therapist',
         currentStreak: existingProfile.currentStreak || 0,
         longestStreak: existingProfile.longestStreak || 0,
         lastJournalDate: existingProfile.lastJournalDate || '',
-        mbtiType: existingProfile.mbtiType || null,
-        latestMood: existingProfile.latestMood || null,
-        detectedIssues: existingProfile.detectedIssues || null,
-        lastDailyTopicCompletionDate: existingProfile.lastDailyTopicCompletionDate || null,
-        dailyTopicResponses: existingProfile.dailyTopicResponses || null,
+        mbtiType: existingProfile.mbtiType === undefined ? null : existingProfile.mbtiType,
+        latestMood: existingProfile.latestMood === undefined ? null : existingProfile.latestMood,
+        detectedIssues: existingProfile.detectedIssues === undefined ? null : existingProfile.detectedIssues,
+        dailyGeneratedTopics: existingProfile.dailyGeneratedTopics === undefined ? null : existingProfile.dailyGeneratedTopics,
+        lastDailyTopicCompletionDate: existingProfile.lastDailyTopicCompletionDate === undefined ? null : existingProfile.lastDailyTopicCompletionDate,
       };
     } else {
       userProfileData = {
@@ -170,24 +179,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         mbtiType: null,
         latestMood: null,
         detectedIssues: null,
+        dailyGeneratedTopics: null,
         lastDailyTopicCompletionDate: null,
-        dailyTopicResponses: null,
       };
     }
     
     const authProfileUpdates: { displayName?: string | null; photoURL?: string | null } = {};
-    if (userProfileData.displayName && (!auth.currentUser?.displayName || auth.currentUser.displayName !== userProfileData.displayName)) {
+    if (userProfileData.displayName !== undefined && (auth.currentUser?.displayName !== userProfileData.displayName)) {
       authProfileUpdates.displayName = userProfileData.displayName;
     }
-    if (userProfileData.photoURL !== undefined && (!auth.currentUser?.photoURL || auth.currentUser.photoURL !== userProfileData.photoURL)) {
+    if (userProfileData.photoURL !== undefined && (auth.currentUser?.photoURL !== userProfileData.photoURL)) {
        authProfileUpdates.photoURL = userProfileData.photoURL;
     }
+
     if (auth.currentUser && Object.keys(authProfileUpdates).length > 0) {
         await updateFirebaseProfile(auth.currentUser, authProfileUpdates);
     }
     
-    await setDoc(userDocRef, userProfileData, { merge: true });
-    setUser(userProfileData);
+    // Ensure all undefined top-level fields are converted to null for Firestore
+    const firestoreSafeUserProfileData = Object.fromEntries(
+      Object.entries(userProfileData).map(([key, value]) => [key, value === undefined ? null : value])
+    );
+
+    await setDoc(userDocRef, firestoreSafeUserProfileData, { merge: true });
+    setUser(userProfileData); // Use the original potentially undefined values for local state
     setError(null);
     router.push('/dashboard');
   };
@@ -268,47 +283,53 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (details.photoURL !== undefined && details.photoURL !== auth.currentUser.photoURL) { 
          authProfileUpdates.photoURL = details.photoURL === '' ? null : details.photoURL;
       }
+
       if (Object.keys(authProfileUpdates).length > 0) {
         await updateFirebaseProfile(auth.currentUser, authProfileUpdates);
       }
       
-      const firestoreSafeDetails: Partial<UserProfile> = {};
-      for (const key in details) {
-        if (Object.prototype.hasOwnProperty.call(details, key)) {
-          const k = key as keyof UserProfile;
-          // Firestore cannot store 'undefined', so convert to 'null'
-          firestoreSafeDetails[k] = details[k] === undefined ? null : details[k];
-        }
-      }
-      // Ensure nested objects like detectedIssues are merged correctly
-      if (details.detectedIssues) {
-        firestoreSafeDetails.detectedIssues = {
-          ...(user.detectedIssues || {}), // Spread existing issues
-          ...details.detectedIssues, // Spread new/updated issues
-        };
-        // Now handle incrementing occurrences within the merged object
-        for (const issueKey in details.detectedIssues) {
-          if (user.detectedIssues && user.detectedIssues[issueKey] && details.detectedIssues[issueKey].occurrences === 1) {
-            // If issue exists and we are adding an occurrence (passed as 1 for simplicity from client)
-             firestoreSafeDetails.detectedIssues[issueKey].occurrences = (user.detectedIssues[issueKey].occurrences || 0) + 1;
-          } else if (!user.detectedIssues || !user.detectedIssues[issueKey]) {
-            // New issue
-            firestoreSafeDetails.detectedIssues[issueKey].occurrences = 1;
-          }
-          // lastDetected is handled directly by the incoming details
-        }
-      }
-
-
-      await updateDoc(userDocRef, firestoreSafeDetails);
+      const firestoreUpdateData: Partial<UserProfile> = { ...details };
       
-      // Fetch the updated document to ensure the local state is perfectly in sync
+      // Convert undefined to null for Firestore compatibility
+      Object.keys(firestoreUpdateData).forEach(key => {
+        const k = key as keyof UserProfile;
+        if (firestoreUpdateData[k] === undefined) {
+          delete firestoreUpdateData[k]; // Or set to null explicitly if field should exist with null
+        }
+      });
+      
+      // Deep merge for dailyGeneratedTopics and detectedIssues
+      if (details.dailyGeneratedTopics) {
+        const currentTopics = user.dailyGeneratedTopics || {};
+        firestoreUpdateData.dailyGeneratedTopics = { ...currentTopics, ...details.dailyGeneratedTopics };
+        Object.keys(firestoreUpdateData.dailyGeneratedTopics!).forEach(dateKey => {
+            if (details.dailyGeneratedTopics![dateKey]?.userAnswers) {
+                 firestoreUpdateData.dailyGeneratedTopics![dateKey].userAnswers = {
+                    ...(currentTopics[dateKey]?.userAnswers || {}),
+                    ...details.dailyGeneratedTopics![dateKey].userAnswers,
+                };
+            }
+        });
+      }
+      
+      if (details.detectedIssues) {
+        const currentIssues = user.detectedIssues || {};
+        firestoreUpdateData.detectedIssues = { ...currentIssues };
+        for (const issueKey in details.detectedIssues) {
+          firestoreUpdateData.detectedIssues[issueKey] = {
+            occurrences: ((currentIssues[issueKey]?.occurrences || 0) + (details.detectedIssues[issueKey].occurrences || 0)),
+            lastDetected: details.detectedIssues[issueKey].lastDetected,
+          };
+        }
+      }
+
+      await updateDoc(userDocRef, firestoreUpdateData);
+      
       const updatedDocSnap = await getDoc(userDocRef);
       if (updatedDocSnap.exists()) {
         setUser(updatedDocSnap.data() as UserProfile);
       } else {
-         // Fallback or error, though unlikely if updateDoc succeeded
-        setUser(prevUser => prevUser ? { ...prevUser, ...firestoreSafeDetails } : null);
+        setUser(prevUser => prevUser ? { ...prevUser, ...firestoreUpdateData } : null);
       }
       setError(null);
     } catch (err) {
@@ -321,7 +342,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const deleteUserData = async (currentPassword?: string) => {
     if (!user || !auth.currentUser) {
-      const noUserError = { code: 'auth/no-current-user', message: 'No user is currently signed in.' } as AuthError;
+      const noUserError = { code: 'auth/no-current-user', message: 'User not authenticated.' } as AuthError;
       setError(noUserError);
       throw noUserError;
     }
@@ -332,7 +353,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const currentUser = auth.currentUser;
       if (currentUser.providerData.some(p => p.providerId === EmailAuthProvider.PROVIDER_ID)) {
         if (!currentPassword) {
-          throw { code: 'auth/missing-password', message: 'Current password is required for re-authentication.' };
+          throw { code: 'auth/missing-password', message: 'Current password is required for re-authentication.' } as AuthError;
         }
         const credential = EmailAuthProvider.credential(currentUser.email!, currentPassword);
         await reauthenticateWithCredential(currentUser, credential);
@@ -340,7 +361,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const provider = new GoogleAuthProvider();
         await reauthenticateWithPopup(currentUser, provider);
       } else {
-        throw { code: 'auth/reauthentication-not-supported', message: 'Re-authentication method not supported for this user.' };
+        throw { code: 'auth/reauthentication-not-supported', message: 'Re-authentication method not supported for this user.' } as AuthError;
       }
 
       const batch = writeBatch(db);
@@ -360,10 +381,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       
       const userDocRef = doc(db, 'users', user.uid);
-      batch.delete(userDocRef); 
-      await batch.commit(); 
-
-      const freshUserProfile: UserProfile = {
+       // Instead of deleting the user profile doc, reset it.
+      const freshUserProfileData: UserProfile = {
         uid: currentUser.uid,
         email: currentUser.email || null,
         displayName: currentUser.displayName || null,
@@ -375,11 +394,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         mbtiType: null,
         latestMood: null,
         detectedIssues: null,
+        dailyGeneratedTopics: null,
         lastDailyTopicCompletionDate: null,
-        dailyTopicResponses: null,
       };
-      await setDoc(userDocRef, freshUserProfile); 
-      setUser(freshUserProfile);
+      batch.set(userDocRef, freshUserProfileData); // Set overwrites the document with new data
+      await batch.commit(); 
+      
+      setUser(freshUserProfileData);
       
     } catch (err) {
       handleAuthError(err as AuthError);

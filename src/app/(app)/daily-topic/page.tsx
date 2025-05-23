@@ -1,4 +1,4 @@
-
+// src/app/(app)/daily-topic/page.tsx
 'use client';
 
 import { useState, useEffect, FormEvent } from 'react';
@@ -9,49 +9,93 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth, UserProfile } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
-import { getTopicForDay, getDayOfWeek } from '@/lib/daily-topics';
-import type { DailyTopic, DailyTopicScoreRangeResponse } from '@/types/daily-topic';
-import { ArrowLeft, CheckCircle, Info, Lightbulb, Loader2, Save, Send } from 'lucide-react';
+import { generateDailyTopicContent, GenerateDailyTopicContentInput, GenerateDailyTopicContentOutput } from '@/ai/flows/generate-daily-topic-content-flow';
+import type { DailyTopicScoreRangeResponse } from '@/ai/core/daily-topic-content-schemas';
+import { ArrowLeft, CheckCircle, Info, Lightbulb, Loader2, Save } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Timestamp } from 'firebase/firestore';
 
 export default function DailyTopicPage() {
-  const { user, updateUserProfile, loading: authLoading } = useAuth();
+  const { user, updateUserProfile, loading: authLoading, refreshUserProfile } = useAuth();
   const { toast } = useToast();
-  const router = useRouter();
 
-  const [todayTopic, setTodayTopic] = useState<DailyTopic | null>(null);
+  const [todayTopicContent, setTodayTopicContent] = useState<GenerateDailyTopicContentOutput | null>(null);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [currentStage, setCurrentStage] = useState<'loading' | 'questions' | 'reflection' | 'journaling' | 'completed'>('loading');
-  const [miraReflection, setMiraReflection] = useState<DailyTopicScoreRangeResponse | null>(null);
+  const [miraReflectionData, setMiraReflectionData] = useState<DailyTopicScoreRangeResponse | null>(null);
   const [journalEntry, setJournalEntry] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingTopic, setIsLoadingTopic] = useState(true);
 
   const todayDateString = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
-    const dayIndex = new Date().getDay();
-    const topic = getTopicForDay(dayIndex);
-    if (topic) {
-      setTodayTopic(topic);
-      // Check if already completed today
-      if (user?.dailyTopicResponses && user.dailyTopicResponses[todayDateString]?.topic === topic.topicName) {
-        setMiraReflection({
-            miraResponse: user.dailyTopicResponses[todayDateString].miraResponse,
-            journalPrompt: user.dailyTopicResponses[todayDateString].journalPrompt,
-            resourceSuggestion: topic.scoreRanges.low.resourceSuggestion // Or dynamically find it
-        });
-        setJournalEntry(user.dailyTopicResponses[todayDateString].userEntry || '');
-        setCurrentStage('completed');
+    if (authLoading || !user) return;
+
+    const loadOrGenerateTopic = async () => {
+      setIsLoadingTopic(true);
+      if (user.dailyGeneratedTopics && user.dailyGeneratedTopics[todayDateString]) {
+        const topicData = user.dailyGeneratedTopics[todayDateString];
+        setTodayTopicContent(topicData);
+        if (topicData.completed && topicData.userAnswers) {
+          setMiraReflectionData(determineReflection(topicData, topicData.userAnswers.scores));
+          setJournalEntry(topicData.userAnswers.userEntry || '');
+          setCurrentStage('completed');
+        } else {
+          setCurrentStage('questions');
+        }
       } else {
-        setCurrentStage('questions');
+        try {
+          toast({ title: "Generating Today's Topic...", description: "Mira is preparing a special reflection for you." });
+          const input: GenerateDailyTopicContentInput = {
+            userName: user.displayName || undefined,
+            detectedUserIssues: user.detectedIssues ? Object.keys(user.detectedIssues) : undefined,
+          };
+          const generatedTopic = await generateDailyTopicContent(input);
+          setTodayTopicContent(generatedTopic);
+          
+          const updatedProfilePart: Partial<UserProfile> = {
+            dailyGeneratedTopics: {
+              ...(user.dailyGeneratedTopics || {}),
+              [todayDateString]: { ...generatedTopic, completed: false },
+            }
+          };
+          await updateUserProfile(updatedProfilePart);
+          if(refreshUserProfile) await refreshUserProfile(); // Refresh context with the newly generated topic
+          setCurrentStage('questions');
+        } catch (error) {
+          console.error("Error generating daily topic:", error);
+          toast({ title: "Topic Generation Failed", description: "Could not generate today's topic. Please try again later.", variant: "destructive" });
+          setCurrentStage('completed'); // Or an error stage
+        }
       }
-    } else {
-      toast({ title: "No topic for today", description: "Please check back later.", variant: "default" });
-      setCurrentStage('completed'); // Or handle as an error
+      setIsLoadingTopic(false);
+    };
+
+    loadOrGenerateTopic();
+  }, [user, authLoading, todayDateString, toast, updateUserProfile, refreshUserProfile]);
+
+  const determineReflection = (topic: GenerateDailyTopicContentOutput, userScores: number[]): DailyTopicScoreRangeResponse => {
+    let totalScore = 0;
+    topic.scaleQuestions.forEach((q, index) => {
+      let score = userScores[index] || 0;
+      if (q.reverseScore) {
+        score = 6 - score; 
+      }
+      totalScore += score;
+    });
+    
+    const numQuestions = topic.scaleQuestions.length;
+    // Example logic for score ranges, adjust as needed based on expected score distributions
+    if (totalScore <= numQuestions * 2 + Math.floor(numQuestions / 2) -1 ) { // Approx low range
+      return topic.scoreRanges.low;
+    } else if (totalScore <= numQuestions * 3 + Math.floor(numQuestions / 2) ) { // Approx medium range
+      return topic.scoreRanges.medium;
+    } else { // Approx high range
+      return topic.scoreRanges.high;
     }
-  }, [user, todayDateString, toast]);
+  };
+
 
   const handleScoreChange = (questionId: string, value: string) => {
     setScores(prev => ({ ...prev, [questionId]: parseInt(value, 10) }));
@@ -59,58 +103,46 @@ export default function DailyTopicPage() {
 
   const handleSubmitScores = (e: FormEvent) => {
     e.preventDefault();
-    if (!todayTopic || Object.keys(scores).length !== todayTopic.scaleQuestions.length) {
+    if (!todayTopicContent || Object.keys(scores).length !== todayTopicContent.scaleQuestions.length) {
       toast({ title: "Incomplete", description: "Please answer all questions.", variant: "destructive" });
       return;
     }
-
-    let totalScore = 0;
-    todayTopic.scaleQuestions.forEach(q => {
-      let score = scores[q.id] || 0;
-      if (q.reverseScore) {
-        score = 6 - score; // Reverse score (1->5, 2->4, 3->3, 4->2, 5->1)
-      }
-      totalScore += score;
-    });
     
-    // Determine score range (example logic, adjust based on your number of questions)
-    const numQuestions = todayTopic.scaleQuestions.length;
-    const maxPossibleScore = numQuestions * 5;
-    let reflectionData;
-
-    if (totalScore <= numQuestions * 2 + Math.floor(numQuestions/2) -1 ) { // Approximation for low range
-      reflectionData = todayTopic.scoreRanges.low;
-    } else if (totalScore <= numQuestions * 3 + Math.floor(numQuestions/2) ) { // Approximation for medium range
-      reflectionData = todayTopic.scoreRanges.medium;
-    } else {
-      reflectionData = todayTopic.scoreRanges.high;
-    }
-    setMiraReflection(reflectionData);
+    const userScoresArray = todayTopicContent.scaleQuestions.map(q => scores[q.id] || 0);
+    const reflectionData = determineReflection(todayTopicContent, userScoresArray);
+    
+    setMiraReflectionData(reflectionData);
     setCurrentStage('reflection');
   };
 
   const handleSaveJournalEntry = async () => {
-    if (!user || !todayTopic || !miraReflection) return;
+    if (!user || !todayTopicContent || !miraReflectionData) return;
     setIsSaving(true);
     try {
-      const newDailyTopicResponse = {
-        topic: todayTopic.topicName,
-        scores: todayTopic.scaleQuestions.map(q => scores[q.id] || 0),
-        miraResponse: miraReflection.miraResponse,
-        journalPrompt: miraReflection.journalPrompt,
+      const userScoresArray = todayTopicContent.scaleQuestions.map(q => scores[q.id] || 0);
+      const userAnswersData = {
+        topicName: todayTopicContent.topicName, // Save the topic name with the answer
+        scores: userScoresArray,
+        miraResponse: miraReflectionData.miraResponse, // This is Mira's reflection based on score
+        journalPrompt: miraReflectionData.journalPrompt, // This is Mira's prompt based on score
         userEntry: journalEntry,
         completedAt: Timestamp.now(),
       };
 
-      const updatedResponses = {
-        ...(user.dailyTopicResponses || {}),
-        [todayDateString]: newDailyTopicResponse
+      const updatedTopics = {
+        ...(user.dailyGeneratedTopics || {}),
+        [todayDateString]: {
+          ...(user.dailyGeneratedTopics?.[todayDateString] || todayTopicContent), // Persist the generated topic content
+          completed: true,
+          userAnswers: userAnswersData,
+        }
       };
       
       await updateUserProfile({ 
-        dailyTopicResponses: updatedResponses,
-        lastDailyTopicCompletionDate: todayDateString,
+        dailyGeneratedTopics: updatedTopics,
+        lastDailyTopicCompletionDate: todayDateString, // This can still track overall completion for the day
       });
+      if (refreshUserProfile) await refreshUserProfile();
 
       toast({ title: "Entry Saved!", description: "Your reflections for today's topic have been saved." });
       setCurrentStage('completed');
@@ -122,15 +154,26 @@ export default function DailyTopicPage() {
     }
   };
 
-  if (authLoading || currentStage === 'loading' || !todayTopic) {
+  if (authLoading || isLoadingTopic || (currentStage === 'loading' && !todayTopicContent) ) {
     return (
       <div className="flex justify-center items-center h-[calc(100vh-10rem)]">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="ml-3 text-muted-foreground">Preparing your daily reflection...</p>
       </div>
     );
   }
   
-  if (currentStage === 'completed' && todayTopic && miraReflection) {
+  if (!todayTopicContent) {
+     return (
+      <div className="max-w-2xl mx-auto py-8 px-4 text-center">
+         <h1 className="text-xl font-semibold text-destructive">Topic Unavailable</h1>
+         <p className="text-muted-foreground my-4">We couldn't load or generate a topic for you today. Please try again later or check your internet connection.</p>
+         <Button asChild><Link href="/dashboard"><ArrowLeft className="mr-2 h-4 w-4"/>Back to Dashboard</Link></Button>
+      </div>
+    );
+  }
+
+  if (currentStage === 'completed' && miraReflectionData) {
     return (
       <div className="max-w-2xl mx-auto py-8 px-4 space-y-6">
         <div className="flex items-center gap-2 mb-4">
@@ -144,7 +187,7 @@ export default function DailyTopicPage() {
         </div>
         <Card className="shadow-xl rounded-2xl">
           <CardHeader className="bg-primary/5 border-b border-primary/20">
-            <CardTitle className="text-xl text-primary">{todayTopic.topicName}</CardTitle>
+            <CardTitle className="text-xl text-primary">{todayTopicContent.topicName}</CardTitle>
             <CardDescription className="text-sm text-muted-foreground">
               You've completed this topic for {new Date(todayDateString + 'T00:00:00').toLocaleDateString()}.
             </CardDescription>
@@ -152,16 +195,16 @@ export default function DailyTopicPage() {
           <CardContent className="p-6 space-y-4">
             <div>
               <h3 className="font-semibold text-foreground mb-1">Mira's Reflection:</h3>
-              <p className="text-foreground/80 whitespace-pre-wrap">{miraReflection.miraResponse}</p>
+              <p className="text-foreground/80 whitespace-pre-wrap">{miraReflectionData.miraResponse}</p>
             </div>
-             {miraReflection.resourceSuggestion && (
+             {miraReflectionData.resourceSuggestion && (
               <div className="p-3 bg-accent/50 rounded-md border border-accent/30">
-                <p className="text-sm text-accent-foreground/90"><Info className="inline h-4 w-4 mr-1.5 text-accent-foreground/70"/> {miraReflection.resourceSuggestion}</p>
+                <p className="text-sm text-accent-foreground/90"><Info className="inline h-4 w-4 mr-1.5 text-accent-foreground/70"/> {miraReflectionData.resourceSuggestion}</p>
               </div>
             )}
             <div>
               <h3 className="font-semibold text-foreground mb-1">Your Journal Prompt:</h3>
-              <p className="text-foreground/80 italic">"{miraReflection.journalPrompt}"</p>
+              <p className="text-foreground/80 italic">"{miraReflectionData.journalPrompt}"</p>
             </div>
             <div>
               <h3 className="font-semibold text-foreground mb-1">Your Entry:</h3>
@@ -192,15 +235,15 @@ export default function DailyTopicPage() {
 
       <Card className="shadow-xl rounded-2xl">
         <CardHeader className="bg-primary/5 border-b border-primary/20">
-          <CardTitle className="text-xl text-primary">{todayTopic.topicName}</CardTitle>
-          <CardDescription className="text-sm text-muted-foreground">{todayTopic.introduction}</CardDescription>
+          <CardTitle className="text-xl text-primary">{todayTopicContent.topicName}</CardTitle>
+          <CardDescription className="text-sm text-muted-foreground">{todayTopicContent.introduction}</CardDescription>
         </CardHeader>
 
         {currentStage === 'questions' && (
           <form onSubmit={handleSubmitScores}>
             <CardContent className="p-6 space-y-6">
               <p className="text-sm text-muted-foreground">Please rate the following statements on a scale of 1 (Strongly Disagree) to 5 (Strongly Agree):</p>
-              {todayTopic.scaleQuestions.map((q, index) => (
+              {todayTopicContent.scaleQuestions.map((q, index) => (
                 <div key={q.id} className="space-y-2 border-b pb-4 last:border-b-0 last:pb-0">
                   <Label htmlFor={`q-${q.id}`} className="text-foreground/90">{index + 1}. {q.text}</Label>
                   <RadioGroup
@@ -225,15 +268,15 @@ export default function DailyTopicPage() {
           </form>
         )}
 
-        {currentStage === 'reflection' && miraReflection && (
+        {currentStage === 'reflection' && miraReflectionData && (
           <CardContent className="p-6 space-y-4">
             <div>
               <h3 className="font-semibold text-foreground mb-1 flex items-center gap-2"><Lightbulb className="h-5 w-5 text-primary"/>Mira's Reflection:</h3>
-              <p className="text-foreground/80 whitespace-pre-wrap p-3 bg-primary/5 rounded-md">{miraReflection.miraResponse}</p>
+              <p className="text-foreground/80 whitespace-pre-wrap p-3 bg-primary/5 rounded-md">{miraReflectionData.miraResponse}</p>
             </div>
-            {miraReflection.resourceSuggestion && (
+            {miraReflectionData.resourceSuggestion && (
               <div className="p-3 bg-accent/50 rounded-md border border-accent/30">
-                <p className="text-sm text-accent-foreground/90"><Info className="inline h-4 w-4 mr-1.5 text-accent-foreground/70"/> {miraReflection.resourceSuggestion}</p>
+                <p className="text-sm text-accent-foreground/90"><Info className="inline h-4 w-4 mr-1.5 text-accent-foreground/70"/> {miraReflectionData.resourceSuggestion}</p>
               </div>
             )}
             <Button onClick={() => setCurrentStage('journaling')} className="w-full sm:w-auto">
@@ -242,20 +285,20 @@ export default function DailyTopicPage() {
           </CardContent>
         )}
         
-        {currentStage === 'journaling' && miraReflection && (
+        {currentStage === 'journaling' && miraReflectionData && (
            <CardContent className="p-6 space-y-4">
             <div>
                 <h3 className="font-semibold text-foreground mb-1 flex items-center gap-2"><Lightbulb className="h-5 w-5 text-primary"/>Mira's Reflection:</h3>
-                <p className="text-foreground/80 whitespace-pre-wrap p-3 bg-primary/5 rounded-md mb-4">{miraReflection.miraResponse}</p>
+                <p className="text-foreground/80 whitespace-pre-wrap p-3 bg-primary/5 rounded-md mb-4">{miraReflectionData.miraResponse}</p>
             </div>
-            {miraReflection.resourceSuggestion && (
+            {miraReflectionData.resourceSuggestion && (
               <div className="p-3 bg-accent/50 rounded-md border border-accent/30 mb-4">
-                <p className="text-sm text-accent-foreground/90"><Info className="inline h-4 w-4 mr-1.5 text-accent-foreground/70"/> {miraReflection.resourceSuggestion}</p>
+                <p className="text-sm text-accent-foreground/90"><Info className="inline h-4 w-4 mr-1.5 text-accent-foreground/70"/> {miraReflectionData.resourceSuggestion}</p>
               </div>
             )}
             <div>
               <Label htmlFor="journalEntry" className="font-semibold text-foreground mb-1.5 block">Your Journal Prompt:</Label>
-              <p className="text-foreground/80 italic mb-3 p-3 bg-muted/50 rounded-md">"{miraReflection.journalPrompt}"</p>
+              <p className="text-foreground/80 italic mb-3 p-3 bg-muted/50 rounded-md">"{miraReflectionData.journalPrompt}"</p>
               <Textarea
                 id="journalEntry"
                 value={journalEntry}
@@ -273,3 +316,4 @@ export default function DailyTopicPage() {
         )}
       </Card>
     </div>
+  
