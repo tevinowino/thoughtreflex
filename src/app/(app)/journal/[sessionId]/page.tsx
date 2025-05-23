@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef, FormEvent, useCallback } from 'reac
 import { useParams, useRouter } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, Settings2, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, Save, ImageIcon, Mic } from 'lucide-react';
+import { Send, Settings2, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, Save, ImageIcon, Mic, Zap, Smile } from 'lucide-react';
 import { useAuth, UserProfile } from '@/contexts/auth-context';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
