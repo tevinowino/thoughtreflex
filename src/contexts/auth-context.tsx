@@ -16,11 +16,11 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
   reauthenticateWithPopup,
-  // deleteUser, // Not used if we only delete data
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc, Timestamp, collection, getDocs, writeBatch, deleteDoc as deleteFirestoreDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
-import type { GenerateDailyTopicContentOutput, DailyTopicUserAnswers } from '@/ai/core/daily-topic-content-schemas';
+import type { GenerateDailyTopicContentOutput } from '@/ai/core/daily-topic-content-schemas';
+import type { DailyTopicUserAnswers } from '@/ai/core/daily-topic-content-schemas'; // Correct import
 
 export interface UserProfile {
   uid: string;
@@ -45,12 +45,13 @@ export interface UserProfile {
   dailyGeneratedTopics?: {
     [date: string]: GenerateDailyTopicContentOutput & {
       completed?: boolean;
-      userAnswers?: DailyTopicUserAnswers; // Using the more specific type
+      userAnswers?: DailyTopicUserAnswers;
     };
   } | null;
   lastDailyTopicCompletionDate?: string | null; // YYYY-MM-DD
-  milestonesAchieved?: number[]; // e.g., [3, 7, 14, 30] for streaks
+  milestonesAchieved?: number[];
   lastCompassionCheckInDate?: string | null; // YYYY-MM-DD
+  lastRecapGeneratedDate?: string | null; // YYYY-MM-DD, for weekly recap restriction
 }
 
 
@@ -87,6 +88,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     lastDailyTopicCompletionDate: null,
     milestonesAchieved: [],
     lastCompassionCheckInDate: null,
+    lastRecapGeneratedDate: null, // Initialize new field
   };
 
   const fetchAndSetUser = async (firebaseUser: FirebaseUser) => {
@@ -95,25 +97,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (userDocSnap.exists()) {
       const profileData = userDocSnap.data();
       setUser({
-        ...defaultUserProfileValues, // Ensure all fields have defaults
-        ...profileData, // Spread existing data first
+        ...defaultUserProfileValues,
+        ...profileData,
         uid: firebaseUser.uid,
         email: firebaseUser.email || profileData.email || null,
         displayName: firebaseUser.displayName || profileData.displayName || null,
         photoURL: firebaseUser.photoURL || profileData.photoURL || null,
-        // Ensure nested objects are properly defaulted if missing
         detectedIssues: profileData.detectedIssues || null,
         dailyGeneratedTopics: profileData.dailyGeneratedTopics || null,
         latestMood: profileData.latestMood || null,
         milestonesAchieved: profileData.milestonesAchieved || [],
+        lastRecapGeneratedDate: profileData.lastRecapGeneratedDate || null,
       } as UserProfile);
     } else {
-      // New user profile creation
       const newUserProfile: UserProfile = {
         uid: firebaseUser.uid,
         email: firebaseUser.email || null,
-        displayName: firebaseUser.displayName || 'Valued User', // Default display name
-        photoURL: firebaseUser.photoURL || null, // Default photoURL
+        displayName: firebaseUser.displayName || 'Valued User',
+        photoURL: firebaseUser.photoURL || null,
         ...defaultUserProfileValues,
       };
       await setDoc(userDocRef, newUserProfile, { merge: true });
@@ -165,6 +166,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         displayName: initialDisplayName,
         photoURL: initialPhotoURL,
         milestonesAchieved: existingProfile.milestonesAchieved || [],
+        lastRecapGeneratedDate: existingProfile.lastRecapGeneratedDate || null,
       };
     } else {
       userProfileData = {
@@ -301,10 +303,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const currentIssues = user.detectedIssues || {};
         firestoreUpdateData.detectedIssues = { ...currentIssues };
         for (const issueKey in details.detectedIssues) {
-          firestoreUpdateData.detectedIssues[issueKey] = {
-            occurrences: ((currentIssues[issueKey]?.occurrences || 0) + (details.detectedIssues[issueKey].occurrences || 0)),
-            lastDetected: details.detectedIssues[issueKey].lastDetected,
-          };
+           if (details.detectedIssues[issueKey]) { // Check if issueKey exists in details
+            firestoreUpdateData.detectedIssues[issueKey] = {
+                occurrences: ((currentIssues[issueKey]?.occurrences || 0) + (details.detectedIssues[issueKey]?.occurrences || 0)),
+                lastDetected: details.detectedIssues[issueKey]?.lastDetected || Timestamp.now(),
+            };
+           }
         }
       }
       if (details.milestonesAchieved) {
@@ -314,8 +318,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       await updateDoc(userDocRef, firestoreUpdateData);
       
-      const updatedUser = { ...user, ...firestoreUpdateData };
-      // Ensure nested objects are merged correctly, not just replaced
+      const updatedUser = { ...user, ...firestoreUpdateData } as UserProfile; // Cast to UserProfile
       if (details.dailyGeneratedTopics) updatedUser.dailyGeneratedTopics = firestoreUpdateData.dailyGeneratedTopics;
       if (details.detectedIssues) updatedUser.detectedIssues = firestoreUpdateData.detectedIssues;
       if (details.milestonesAchieved) updatedUser.milestonesAchieved = firestoreUpdateData.milestonesAchieved;
@@ -355,7 +358,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       const batch = writeBatch(db);
-      const collectionsToDelete = ['goals', 'journalSessions', 'notebookEntries', 'weeklyRecaps', 'mindShifts', 'dailyMoods', 'dailyTopicUserAnswers']; // dailyTopicUserAnswers to be deleted
+      const collectionsToDelete = ['goals', 'journalSessions', 'notebookEntries', 'weeklyRecaps', 'mindShifts', 'dailyMoods', 'dailyGeneratedTopics']; 
 
       for (const collName of collectionsToDelete) {
         const collRef = collection(db, 'users', user.uid, collName);
@@ -371,17 +374,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       
       const userDocRef = doc(db, 'users', user.uid);
+      
       const freshUserProfileData: UserProfile = {
         uid: currentUser.uid,
         email: currentUser.email || null,
         displayName: currentUser.displayName || 'Valued User',
         photoURL: currentUser.photoURL || null,
-        ...defaultUserProfileValues, // Apply all defaults
+        ...defaultUserProfileValues,
       };
-      batch.set(userDocRef, freshUserProfileData); 
+      
+      batch.set(userDocRef, freshUserProfileData); // Reset profile to defaults
       await batch.commit(); 
       
-      setUser(freshUserProfileData);
+      setUser(freshUserProfileData); // Update local user state
       
     } catch (err) {
       handleAuthError(err as AuthError);
@@ -416,3 +421,4 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
+

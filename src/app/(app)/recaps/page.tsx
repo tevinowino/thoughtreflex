@@ -3,13 +3,13 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { CalendarDays, Edit, FileText, ThumbsUp, Zap, Wind, Loader2 } from 'lucide-react';
+import { CalendarDays, Edit, FileText, ThumbsUp, Zap, Wind, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { generateWeeklyRecap, WeeklyRecapInput } from '@/ai/flows/weekly-ai-recap';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth, UserProfile } from '@/contexts/auth-context'; // Import UserProfile
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -21,15 +21,15 @@ import {
   Timestamp,
   where,
   getDocs,
-  // limit, // Optionally use if needed
 } from 'firebase/firestore';
+import { format, getDay, isSameDay } from 'date-fns';
 
 export interface WeeklyRecap {
   id: string;
   weekOf: string;
   title: string;
   summary: string;
-  emotionalHigh?: string; // These can be derived by AI or manually added later
+  emotionalHigh?: string;
   struggleOfTheWeek?: string;
   growthMoment?: string;
   generatedAt: Date;
@@ -37,11 +37,34 @@ export interface WeeklyRecap {
 }
 
 export default function RecapsPage() {
-  const { user } = useAuth();
+  const { user, updateUserProfile, refreshUserProfile } = useAuth();
   const { toast } = useToast();
   const [recaps, setRecaps] = useState<WeeklyRecap[]>([]);
   const [isLoadingRecaps, setIsLoadingRecaps] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  const today = new Date();
+  const isSunday = getDay(today) === 0; // 0 is Sunday
+  const todayDateString = format(today, 'yyyy-MM-dd');
+
+  const hasGeneratedThisWeek = useMemo(() => {
+    if (!user?.lastRecapGeneratedDate) return false;
+    // Check if lastRecapGeneratedDate is the same as the current Sunday
+    // This assumes recaps are only generated on Sundays.
+    const lastRecapDate = new Date(user.lastRecapGeneratedDate + "T00:00:00"); // Ensure correct date parsing
+    return isSunday && isSameDay(lastRecapDate, today);
+  }, [user?.lastRecapGeneratedDate, isSunday, today]);
+
+  const canGenerateRecap = isSunday && !hasGeneratedThisWeek;
+  
+  let buttonText = "Generate This Week's Recap";
+  let buttonTooltip = "";
+  if (!isSunday) {
+    buttonTooltip = "Weekly recaps can only be generated on Sundays.";
+  } else if (hasGeneratedThisWeek) {
+    buttonTooltip = "You've already generated this week's recap.";
+  }
+
 
   useEffect(() => {
     if (!user) {
@@ -73,10 +96,15 @@ export default function RecapsPage() {
   }, [user, toast]);
 
   const handleGenerateRecap = async () => {
-    if (!user) {
+    if (!user || !refreshUserProfile || !updateUserProfile) {
       toast({ title: "Error", description: "You need to be logged in.", variant: "destructive" });
       return;
     }
+    if (!canGenerateRecap) {
+      toast({ title: "Cannot Generate Recap", description: buttonTooltip || "Recap generation is not available right now.", variant: "default" });
+      return;
+    }
+
     setIsGenerating(true);
     toast({
       title: "Generating Recap...",
@@ -84,14 +112,13 @@ export default function RecapsPage() {
     });
     
     try {
-      // 1. Fetch journal entries from the last 7 days
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       const sevenDaysAgoTimestamp = Timestamp.fromDate(sevenDaysAgo);
 
       const sessionsQuery = query(
         collection(db, 'users', user.uid, 'journalSessions'),
-        where('lastUpdatedAt', '>=', sevenDaysAgoTimestamp), // Sessions updated in the last 7 days
+        where('lastUpdatedAt', '>=', sevenDaysAgoTimestamp),
         orderBy('lastUpdatedAt', 'desc')
       );
 
@@ -110,7 +137,7 @@ export default function RecapsPage() {
       for (const sessionDoc of sessionsSnapshot.docs) {
         const messagesQuery = query(
           collection(db, 'users', user.uid, 'journalSessions', sessionDoc.id, 'messages'),
-          where('sender', '==', 'user'), // Only user messages
+          where('sender', '==', 'user'),
           orderBy('timestamp', 'asc')
         );
         const messagesSnapshot = await getDocs(messagesQuery);
@@ -137,21 +164,20 @@ export default function RecapsPage() {
       const result = await generateWeeklyRecap(recapInput);
       
       const newRecapData: Omit<WeeklyRecap, 'id' | 'generatedAt'> = {
-        weekOf: `Week of ${new Date().toLocaleDateString()}`, 
-        title: `Weekly Recap - ${new Date().toLocaleDateString()}`,
-        summary: result.recap, // AI now generates the full summary
+        weekOf: `Week of ${new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`, 
+        title: `Weekly Recap - ${new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`,
+        summary: result.recap,
         userId: user.uid,
-        // The AI is prompted to include trends, victories, struggles in the summary.
-        // If the AI output schema were to return these separately, you'd map them here.
-        // emotionalHigh: result.emotionalHigh, 
-        // struggleOfTheWeek: result.struggleOfTheWeek,
-        // growthMoment: result.growthMoment, 
       };
 
       await addDoc(collection(db, 'users', user.uid, 'weeklyRecaps'), {
         ...newRecapData,
         generatedAt: serverTimestamp(),
       });
+      
+      // Update lastRecapGeneratedDate in user profile
+      await updateUserProfile({ lastRecapGeneratedDate: todayDateString });
+      await refreshUserProfile(); // Refresh context
       
       toast({
         title: "Weekly Recap Generated!",
@@ -187,18 +213,36 @@ export default function RecapsPage() {
             Review your progress, emotional trends, and key moments from each week.
           </p>
         </div>
-        <Button size="lg" onClick={handleGenerateRecap} disabled={isGenerating}>
+        <Button 
+            size="lg" 
+            onClick={handleGenerateRecap} 
+            disabled={isGenerating || !canGenerateRecap}
+            title={buttonTooltip}
+        >
           {isGenerating ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Generating...
             </>
           ) : (
             <>
-              <Edit className="mr-2 h-5 w-5" /> Generate This Week's Recap
+              <Edit className="mr-2 h-5 w-5" /> {buttonText}
             </>
           )}
         </Button>
       </div>
+      {!isSunday && (
+        <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-700 dark:text-yellow-400 flex items-center gap-2 text-sm">
+            <AlertCircle className="h-5 w-5"/>
+            Weekly recaps can only be generated on Sundays.
+        </div>
+      )}
+      {isSunday && hasGeneratedThisWeek && (
+         <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg text-green-700 dark:text-green-400 flex items-center gap-2 text-sm">
+            <AlertCircle className="h-5 w-5"/>
+            You've already generated this week's recap. Come back next Sunday!
+        </div>
+      )}
+
 
       {recaps.length === 0 ? (
         <Card className="text-center py-12 shadow-lg rounded-2xl">
@@ -207,7 +251,7 @@ export default function RecapsPage() {
                 <CalendarDays className="h-10 w-10 text-primary" />
             </div>
             <CardTitle className="mt-4">No Recaps Yet</CardTitle>
-            <CardDescription>Generate your first recap to see a summary of your week's reflections.</CardDescription>
+            <CardDescription>Generate your first recap on a Sunday to see a summary of your week's reflections.</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">Keep journaling and generate a recap when you're ready!</p>
@@ -274,11 +318,12 @@ export default function RecapsPage() {
           </div>
           <div className="md:w-1/3 flex-shrink-0">
              <Image 
-              src="/weeklyreflecting.png"
+              src="/images/recaps/weeklyreflecting.png"
               alt="Person looking at a scenic view thoughtfully, representing weekly reflection"
               width={400}
               height={350}
               className="object-cover w-full h-full"
+              data-ai-hint="person reflection nature"
             />
           </div>
         </CardContent>
