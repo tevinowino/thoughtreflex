@@ -1,12 +1,11 @@
 // src/app/(app)/journal/[sessionId]/page.tsx
 'use client';
 
-import React, { useState, useEffect, useRef, FormEvent } from 'react';
+import React, { useState, useEffect, useRef, FormEvent, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, Save } from 'lucide-react';
+import { Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, Save, ImageIcon } from 'lucide-react';
 import { useAuth, UserProfile } from '@/contexts/auth-context'; 
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -15,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { cn } from '@/lib/utils';
-import { getTherapistResponse, TherapistModeInput, AiChatMessage, ReframeThoughtOutput } from '@/ai/flows/therapist-modes';
+import { getTherapistResponse, TherapistModeInput, AiChatMessage as AiFlowChatMessage, ReframeThoughtOutput } from '@/ai/flows/therapist-modes';
 import { generateCheckinPrompt, GenerateCheckinPromptInput } from '@/ai/flows/generate-checkin-prompt-flow';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, addDoc, collection, query, orderBy, onSnapshot, serverTimestamp, Timestamp, setDoc, where, getDocs, limit, deleteDoc, writeBatch } from 'firebase/firestore';
@@ -25,23 +24,7 @@ import { motion } from 'framer-motion';
 import { Label } from '@/components/ui/label';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { showLocalNotification } from '@/components/app/notification-manager';
-import SuggestionButtons from '@/components/app/suggestion-buttons';
-
-
-interface Message {
-  id: string;
-  text: string;
-  sender: 'user' | 'ai';
-  timestamp: Timestamp | Date; 
-  avatar?: string | null;
-  name: string;
-  suggestedGoalText?: string | null;
-  isGoalAdded?: boolean;
-  reframingData?: ReframeThoughtOutput | null;
-  isReframingSaved?: boolean;
-  suggestions?: string[] | null; // For quick tap replies
-  suggestionSelected?: boolean; // To disable buttons after one is tapped
-}
+import ChatBubble, { ChatMessage } from '@/components/app/chat-bubble'; // Import ChatBubble and its ChatMessage type
 
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
 
@@ -59,7 +42,7 @@ export default function JournalSessionPage() {
   const initialSessionId = safeParams.sessionId as string;
 
   const { user, loading: authLoading, updateUserProfile, refreshUserProfile } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sessionTitle, setSessionTitle] = useState('Loading session...');
   const [editableSessionTitle, setEditableSessionTitle] = useState('');
@@ -92,7 +75,7 @@ export default function JournalSessionPage() {
 
       try {
         let daysSinceLastEntry: number | undefined = undefined;
-        if (user.lastJournalDate && user.lastJournalDate.length > 0) { // Check if lastJournalDate is not an empty string
+        if (user.lastJournalDate && user.lastJournalDate.length > 0) { 
             try {
                 daysSinceLastEntry = differenceInDays(new Date(), parseISO(user.lastJournalDate));
             } catch (e) {
@@ -158,7 +141,7 @@ export default function JournalSessionPage() {
           id: docSnap.id,
           ...docSnap.data(),
           timestamp: docSnap.data().timestamp?.toDate ? docSnap.data().timestamp.toDate() : new Date(),
-        } as Message));
+        } as ChatMessage));
         setMessages(fetchedMessages);
         setIsLoadingSession(false);
       }, (error) => {
@@ -177,7 +160,7 @@ export default function JournalSessionPage() {
   }, [messages]);
 
 
-  const handleStreakUpdate = async () => {
+  const handleStreakUpdate = useCallback(async () => {
     if (!user || !refreshUserProfile) return;
 
     try {
@@ -223,6 +206,11 @@ export default function JournalSessionPage() {
           if (newCurrentStreak >= milestone && !newMilestonesAchieved.includes(milestone)) {
             newMilestonesAchieved.push(milestone);
             milestoneReachedThisUpdate = milestone; 
+            showLocalNotification("You’re Doing Amazing 💫", {
+                body: `You've journaled for ${milestoneReachedThisUpdate} days in a row! Keep showing up for yourself.`,
+                icon: '/icons/icon-192x192.png',
+                tag: `milestone-${milestoneReachedThisUpdate}`
+            });
             break; 
           }
         }
@@ -237,26 +225,18 @@ export default function JournalSessionPage() {
         
         toast({ title: "Streak Updated!", description: `You're on a ${newCurrentStreak}-day streak! Keep it up! 🔥` });
         
-        if (milestoneReachedThisUpdate) {
-            showLocalNotification("You’re Doing Amazing 💫", {
-                body: `You've journaled for ${milestoneReachedThisUpdate} days in a row! Keep showing up for yourself.`,
-                icon: '/icons/icon-192x192.png',
-                tag: `milestone-${milestoneReachedThisUpdate}`
-            });
-        }
-        // Call refreshUserProfile *after* updateUserProfile completes to ensure the context has the latest data
         await refreshUserProfile();
       }
     } catch (error) {
       console.error("Error updating streak:", error);
       toast({ title: "Streak Error", description: "Could not update your journaling streak.", variant: "destructive"});
     }
-  };
+  }, [user, refreshUserProfile, updateUserProfile, toast]);
 
-  const processUserMessage = async (userMessageText: string) => {
+  const processUserMessage = useCallback(async (userMessageText: string) => {
     if (!userMessageText.trim() || !user || !refreshUserProfile) return;
 
-    const userMessageData: Omit<Message, 'id' | 'timestamp'> & { timestamp: any } = {
+    const userMessageData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
       text: userMessageText,
       sender: 'user',
       timestamp: serverTimestamp(),
@@ -266,7 +246,7 @@ export default function JournalSessionPage() {
 
     setIsLoadingAiResponse(true);
     let tempUserMessageId = Date.now().toString();
-    setMessages(prev => [...prev, { ...userMessageData, id: tempUserMessageId, timestamp: new Date() } as Message]);
+    setMessages(prev => [...prev, { ...userMessageData, id: tempUserMessageId, timestamp: new Date() } as ChatMessage]);
 
     try {
       let actualSessionId = currentDbSessionId;
@@ -301,7 +281,7 @@ export default function JournalSessionPage() {
       }
       
       const historySnapshot = messages.filter(msg => msg.id !== tempUserMessageId).slice(-MAX_HISTORY_MESSAGES);
-      const historyForAI: AiChatMessage[] = historySnapshot
+      const historyForAI: AiFlowChatMessage[] = historySnapshot
         .map(msg => ({ sender: msg.sender, text: msg.text }));
       historyForAI.push({ sender: 'user', text: userMessageText });
 
@@ -324,7 +304,7 @@ export default function JournalSessionPage() {
 
       const aiResponse = await getTherapistResponse(aiFlowInput);
 
-      const aiMessageData: Omit<Message, 'id' | 'timestamp'> & { timestamp: any } = {
+      const aiMessageData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
         text: aiResponse.response,
         sender: 'ai',
         timestamp: serverTimestamp(),
@@ -374,35 +354,30 @@ export default function JournalSessionPage() {
     } finally {
       setIsLoadingAiResponse(false);
     }
-  };
+  }, [user, currentDbSessionId, currentTherapistMode, messages, handleStreakUpdate, refreshUserProfile, router, toast, updateUserProfile]);
 
 
-  const handleSendMessage = async (e: FormEvent) => {
+  const handleSendMessage = useCallback(async (e: FormEvent) => {
     e.preventDefault();
     await processUserMessage(input);
     setInput(''); 
-  };
+  }, [processUserMessage, input]);
 
-  const handleSuggestionSelect = async (messageId: string, suggestionText: string) => {
+  const handleSuggestionSelect = useCallback(async (messageId: string, suggestionText: string) => {
     if (!user || !currentDbSessionId) return;
     
-    // Disable suggestions for this message locally and in Firestore
     setMessages(prev => prev.map(m => m.id === messageId ? { ...m, suggestionSelected: true, suggestions: null } : m));
     const aiMessageRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId, 'messages', messageId);
     await updateDoc(aiMessageRef, { suggestionSelected: true, suggestions: null });
 
     await processUserMessage(suggestionText);
-  };
+  }, [user, currentDbSessionId, processUserMessage]);
 
 
-  const handleSaveSessionTitle = async () => {
+  const handleSaveSessionTitle = useCallback(async () => {
     if (!currentDbSessionId || !user || !editableSessionTitle.trim()) {
-      if (currentDbSessionId && editableSessionTitle.trim() === '') {
-        // Allow saving empty title
-      } else {
-        toast({ title: "Error", description: "Cannot save empty title for a new session or session not found.", variant: "destructive" });
-        return;
-      }
+      toast({ title: "Error", description: "Session not found or title is empty.", variant: "destructive" });
+      return;
     }
     try {
       const sessionDocRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId);
@@ -417,9 +392,9 @@ export default function JournalSessionPage() {
       console.error("Error renaming session:", error);
       toast({ title: "Error", description: "Could not rename session.", variant: "destructive" });
     }
-  };
+  }, [currentDbSessionId, user, editableSessionTitle, toast]);
 
-  const handleDeleteSession = async () => {
+  const handleDeleteSession = useCallback(async () => {
     if (!currentDbSessionId || !user) {
       toast({ title: "Error", description: "Session not found or user not logged in.", variant: "destructive"});
       return;
@@ -447,9 +422,9 @@ export default function JournalSessionPage() {
       setIsDeletingSession(false);
       setIsSessionSettingsOpen(false);
     }
-  };
+  }, [currentDbSessionId, user, sessionTitle, router, toast]);
 
-  const handleAddSuggestedGoal = async (messageId: string, goalText: string | null | undefined) => {
+  const handleAddSuggestedGoal = useCallback(async (messageId: string, goalText: string | null | undefined) => {
     if (!user || !currentDbSessionId || !goalText) return;
     try {
       await addDoc(collection(db, 'users', user.uid, 'goals'), {
@@ -473,9 +448,9 @@ export default function JournalSessionPage() {
       console.error("Error adding suggested goal:", error);
       toast({ title: "Error", description: "Could not add suggested goal.", variant: "destructive" });
     }
-  };
+  }, [user, currentDbSessionId, toast]);
 
-  const handleSaveMindShift = async (messageId: string, reframingData: ReframeThoughtOutput | null | undefined) => {
+  const handleSaveMindShift = useCallback(async (messageId: string, reframingData: ReframeThoughtOutput | null | undefined) => {
     if (!user || !currentDbSessionId || !reframingData) return;
     try {
         await addDoc(collection(db, 'users', user.uid, 'mindShifts'), {
@@ -497,126 +472,13 @@ export default function JournalSessionPage() {
         console.error("Error saving mind shift:", error);
         toast({ title: "Error", description: "Could not save mind shift.", variant: "destructive" });
     }
-  };
+  }, [user, currentDbSessionId, toast]);
 
 
   const modeIcons = {
     Therapist: <Brain className="mr-2 h-4 w-4" />,
     Coach: <Zap className="mr-2 h-4 w-4" />,
     Friend: <Smile className="mr-2 h-4 w-4" />,
-  };
-
-  const ChatBubble = ({ message }: { message: Message }) => {
-    const isUserMessage = message.sender === 'user';
-    const timestamp = message.timestamp instanceof Date 
-      ? message.timestamp 
-      : new Date((message.timestamp as Timestamp).seconds * 1000);
-    
-    return (
-      <motion.div
-        key={message.id}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: "easeOut" }}
-        className={cn(
-          "group flex items-start gap-2 sm:gap-3 max-w-[90%] xs:max-w-[85%] sm:max-w-[75%] my-4", 
-          isUserMessage ? 'ml-auto flex-row-reverse' : 'mr-auto'
-        )}
-      >
-        <Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0 shadow-md border-2 border-background"> 
-          <AvatarImage src={message.avatar || undefined} alt={isUserMessage ? (user?.displayName || "User") : "Mira"} />
-          <AvatarFallback className={cn(
-            "text-xs",
-            isUserMessage 
-              ? 'bg-secondary text-secondary-foreground' 
-              : 'bg-primary/20 text-primary'
-          )}>
-            {isUserMessage 
-              ? (user?.displayName?.substring(0,1) || <User className="h-4 w-4 sm:h-5 sm:w-5" /> )
-              : <Brain className="h-4 w-4 sm:h-5 sm:w-5" />
-            }
-          </AvatarFallback>
-        </Avatar>
-        
-        <div className="flex flex-col gap-1 w-full">
-          <div
-            className={cn(
-              "px-3 py-2 sm:px-4 sm:py-3 rounded-2xl shadow-md group-hover:shadow-xl transition-shadow duration-200 ease-in-out text-sm", 
-              isUserMessage
-                ? 'bg-primary text-primary-foreground rounded-br-none'
-                : 'bg-muted text-foreground rounded-bl-none'
-            )}
-          >
-            <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
-            <p className={cn(
-              "text-[10px] sm:text-[11px] mt-1.5 sm:mt-2 opacity-50 group-hover:opacity-100 transition-opacity duration-300", 
-              isUserMessage ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground text-left'
-            )}>
-              {timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </p>
-          </div>
-  
-          {!isUserMessage && message.suggestions && message.suggestions.length > 0 && !message.suggestionSelected && (
-            <SuggestionButtons
-              suggestions={message.suggestions}
-              onSelect={(suggestion) => handleSuggestionSelect(message.id, suggestion)}
-              disabled={isLoadingAiResponse}
-            />
-          )}
-
-          {!isUserMessage && message.suggestedGoalText && (
-            <motion.div 
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              transition={{ duration: 0.3, delay: 0.2, ease: "easeOut" }}
-              className="mt-2 pt-2 sm:pt-3 border border-primary/30 bg-accent/20 dark:bg-accent/10 p-2.5 sm:p-3 rounded-xl shadow-sm"
-            >
-              <p className="text-xs font-semibold text-primary/90 dark:text-primary/80 mb-1.5">Mira's Goal Suggestion:</p>
-              <p className="text-xs sm:text-sm text-foreground/90 italic mb-2">"{message.suggestedGoalText}"</p>
-              {!message.isGoalAdded ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-xs h-auto py-1 px-2 sm:py-1.5 sm:px-3 border-primary/50 text-primary hover:bg-primary/10 hover:text-primary"
-                  onClick={() => handleAddSuggestedGoal(message.id, message.suggestedGoalText)}
-                >
-                  <PlusCircle className="mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" /> Add this goal
-                </Button>
-              ) : (
-                <p className="text-xs text-green-600 dark:text-green-400 flex items-center font-medium">
-                  <CheckCircle className="mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Goal added!
-                </p>
-              )}
-            </motion.div>
-          )}
-  
-          {!isUserMessage && message.reframingData && (
-            <motion.div 
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              transition={{ duration: 0.3, delay: 0.2, ease: "easeOut" }}
-              className="mt-2 pt-2 sm:pt-3 border border-purple-500/30 bg-purple-500/10 dark:bg-purple-600/20 p-2.5 sm:p-3 rounded-xl shadow-sm"
-            >
-              <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mb-1.5">Mira's Mind Shift Suggestion:</p>
-              {!message.isReframingSaved ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-xs h-auto py-1 px-2 sm:py-1.5 sm:px-3 border-purple-500/50 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 hover:text-purple-700 dark:hover:text-purple-300"
-                  onClick={() => handleSaveMindShift(message.id, message.reframingData)}
-                >
-                  <Save className="mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" /> Save this Mind Shift
-                </Button>
-              ) : (
-                <p className="text-xs text-green-600 dark:text-green-400 flex items-center font-medium">
-                  <CheckCircle className="mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Mind Shift Saved!
-                </p>
-              )}
-            </motion.div>
-          )}
-        </div>
-      </motion.div>
-    );
   };
 
   if (authLoading || (isLoadingSession && initialSessionId !== 'new')) {
@@ -759,11 +621,18 @@ export default function JournalSessionPage() {
       </CardHeader>
 
       <ScrollArea className="flex-1" viewportRef={viewportRef} ref={scrollAreaRef}>
-        <div className="p-3 xs:p-4">
+        <div className="p-3 xs:p-4"> {/* No specific padding here, handled by ChatBubble margins */}
           {messages.map((message) => (
-            <ChatBubble 
+            <ChatBubble
               key={message.id}
               message={message}
+              currentUserId={user?.uid}
+              currentUserDisplayName={user?.displayName}
+              currentUserPhotoURL={user?.photoURL}
+              onAddSuggestedGoal={handleAddSuggestedGoal}
+              onSaveMindShift={handleSaveMindShift}
+              onSuggestionSelect={handleSuggestionSelect}
+              isLoadingAiResponse={isLoadingAiResponse}
             />
           ))}
           
@@ -820,6 +689,19 @@ export default function JournalSessionPage() {
             }}
           />
           <div className="absolute right-1 xs:right-1.5 sm:right-2 top-1/2 -translate-y-1/2 flex gap-0.5 sm:gap-1">
+            {/* Placeholder for Image Icon
+            <Button 
+              type="button" 
+              variant="ghost" 
+              size="icon" 
+              className="text-muted-foreground hover:text-primary h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9"
+              // onClick={() => setIsImagePromptOpen(true)} // If re-implementing image prompt
+              onClick={() => toast({ title: "Feature Coming Soon!", description: "Image prompts will be available later."})}
+            >
+              <ImageIcon className="h-3.5 w-3.5 xs:h-4 xs:w-4 sm:h-5 sm:w-5" />
+              <span className="sr-only">Visual Prompt</span>
+            </Button>
+            */}
              <Button 
               type="button" 
               variant="ghost" 
