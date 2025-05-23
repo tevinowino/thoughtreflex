@@ -25,7 +25,10 @@ export default function InstallPWAButton() {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
-      setIsInstallable(true);
+      // Only set installable if not already installed
+      if (!window.matchMedia('(display-mode: standalone)').matches && !(window.navigator as any).standalone) {
+        setIsInstallable(true);
+      }
       console.log('`beforeinstallprompt` event was fired.');
     };
 
@@ -55,8 +58,8 @@ export default function InstallPWAButton() {
   const handleInstallClick = async () => {
     if (!deferredPrompt) {
       toast({
-        title: 'Already Installed or Not Available',
-        description: 'The app might already be installed, or your browser may not support this feature right now.',
+        title: 'Installation Not Available',
+        description: 'The app install prompt is not available right now. Your browser might not support it, or it might already be installed.',
         variant: 'default',
       });
       return;
@@ -72,6 +75,7 @@ export default function InstallPWAButton() {
         title: 'Installation Started!',
         description: 'ThoughtReflex is being added to your device.',
       });
+      // The 'appinstalled' event will set isInstalled to true
     } else {
       toast({
         title: 'Installation Dismissed',
@@ -81,30 +85,23 @@ export default function InstallPWAButton() {
     }
     // We can only use the deferred prompt once.
     setDeferredPrompt(null);
-    setIsInstallable(false); // Hide button after prompt is shown, regardless of outcome
+    setIsInstallable(false); 
   };
 
   if (isInstalled) {
-    return (
-      <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-medium">
-        <CheckCircle className="h-5 w-5" />
-        <span>App Installed!</span>
-      </div>
-    );
+    return null; // Hide the component completely if installed
   }
 
   if (!isInstallable) {
-    return (
-        <p className="text-sm text-muted-foreground">
-            If your browser supports PWA installation, an option may appear in the address bar or browser menu.
-        </p>
-    );
+    // Optionally, you can return a message or null if you don't want to show anything when not installable
+    // For the request to "hide this", returning null is appropriate here too.
+    return null; 
   }
 
   return (
-    <Button onClick={handleInstallClick} className="w-full sm:w-auto shadow-md">
-      <DownloadCloud className="mr-2 h-5 w-5" />
-      Install ThoughtReflex App
+    <Button onClick={handleInstallClick} className="w-full sm:w-auto shadow-md" variant="outline" size="sm">
+      <DownloadCloud className="mr-2 h-4 w-4" />
+      Install App
     </Button>
   );
 }
