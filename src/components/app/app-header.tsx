@@ -101,7 +101,7 @@ export function AppHeader() {
         )}
 
         {/* PWA Install Button in Header */}
-        <div className="hidden sm:flex"> {/* Hide on very small screens if it gets too cluttered */}
+        <div className="sm:flex"> {/* Hide on very small screens if it gets too cluttered */}
             <InstallPWAButton />
         </div>
 

@@ -101,7 +101,7 @@ export default function InstallPWAButton() {
   return (
     <Button onClick={handleInstallClick} className="w-full sm:w-auto shadow-md" variant="outline" size="sm">
       <DownloadCloud className="mr-2 h-4 w-4" />
-      Install App
+      <span className='hidden sm:block'>Install App</span>
     </Button>
   );
 }
