@@ -6,13 +6,14 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, Save, ImageIcon } from 'lucide-react';
-import { useAuth, UserProfile } from '@/contexts/auth-context'; 
+import { useAuth, UserProfile } from '@/contexts/auth-context';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'; // Added this import
 import { cn } from '@/lib/utils';
 import { getTherapistResponse, TherapistModeInput, AiChatMessage as AiFlowChatMessage, ReframeThoughtOutput } from '@/ai/flows/therapist-modes';
 import { generateCheckinPrompt, GenerateCheckinPromptInput } from '@/ai/flows/generate-checkin-prompt-flow';
@@ -24,7 +25,7 @@ import { motion } from 'framer-motion';
 import { Label } from '@/components/ui/label';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { showLocalNotification } from '@/components/app/notification-manager';
-import ChatBubble, { ChatMessage } from '@/components/app/chat-bubble'; // Import ChatBubble and its ChatMessage type
+import ChatBubble, { ChatMessage } from '@/components/app/chat-bubble'; 
 
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
 
@@ -349,8 +350,8 @@ export default function JournalSessionPage() {
     } catch (error: any) {
       console.error("Error sending message or getting AI response:", error);
       toast({ title: "Error", description: error.message || "Could not process message.", variant: "destructive" });
-      setInput(userMessageText);
-      setMessages(prev => prev.filter(m => m.id !== tempUserMessageId));
+      setInput(userMessageText); // Restore input if send failed
+      setMessages(prev => prev.filter(m => m.id !== tempUserMessageId)); // Remove temporary user message
     } finally {
       setIsLoadingAiResponse(false);
     }
@@ -366,10 +367,13 @@ export default function JournalSessionPage() {
   const handleSuggestionSelect = useCallback(async (messageId: string, suggestionText: string) => {
     if (!user || !currentDbSessionId) return;
     
+    // Optimistically update UI
     setMessages(prev => prev.map(m => m.id === messageId ? { ...m, suggestionSelected: true, suggestions: null } : m));
+    // Update Firestore
     const aiMessageRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId, 'messages', messageId);
     await updateDoc(aiMessageRef, { suggestionSelected: true, suggestions: null });
 
+    // Process the selected suggestion as a user message
     await processUserMessage(suggestionText);
   }, [user, currentDbSessionId, processUserMessage]);
 
@@ -385,7 +389,7 @@ export default function JournalSessionPage() {
         title: editableSessionTitle.trim(),
         lastUpdatedAt: serverTimestamp() 
       });
-      setSessionTitle(editableSessionTitle.trim()); 
+      setSessionTitle(editableSessionTitle.trim()); // Update local state for display
       toast({ title: "Session Renamed", description: "The session title has been updated." });
       setIsSessionSettingsOpen(false);
     } catch (error) {
@@ -404,6 +408,7 @@ export default function JournalSessionPage() {
       const sessionDocRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId);
       const messagesColRef = collection(db, 'users', user.uid, 'journalSessions', currentDbSessionId, 'messages');
       
+      // Delete all messages in subcollection
       const messagesSnapshot = await getDocs(messagesColRef);
       const batch = writeBatch(db);
       messagesSnapshot.forEach(docSnap => { 
@@ -411,6 +416,7 @@ export default function JournalSessionPage() {
       });
       await batch.commit();
 
+      // Delete the session document itself
       await deleteDoc(sessionDocRef);
 
       toast({ title: "Session Deleted", description: `The session titled "${sessionTitle}" and its messages have been removed.` });
@@ -435,9 +441,11 @@ export default function JournalSessionPage() {
       });
       toast({ title: "Goal Added!", description: `"${goalText}" has been added to your goals.` });
 
+      // Update the message in Firestore to mark the goal as added
       const messageRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId, 'messages', messageId);
       await updateDoc(messageRef, { isGoalAdded: true });
       
+      // Optimistically update local state (or rely on snapshot listener if performance allows)
       setMessages(prevMessages =>
         prevMessages.map(m =>
           m.id === messageId ? { ...m, isGoalAdded: true } : m
@@ -460,9 +468,11 @@ export default function JournalSessionPage() {
         });
         toast({ title: "Mind Shift Saved!", description: "Your reframed thought has been saved."});
 
+        // Update the message in Firestore
         const messageRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId, 'messages', messageId);
         await updateDoc(messageRef, { isReframingSaved: true });
 
+        // Optimistically update local state
         setMessages(prevMessages => 
             prevMessages.map(m => 
                 m.id === messageId ? { ...m, isReframingSaved: true } : m
@@ -621,7 +631,7 @@ export default function JournalSessionPage() {
       </CardHeader>
 
       <ScrollArea className="flex-1" viewportRef={viewportRef} ref={scrollAreaRef}>
-        <div className="p-3 xs:p-4"> {/* No specific padding here, handled by ChatBubble margins */}
+        <div className="p-3 xs:p-4">
           {messages.map((message) => (
             <ChatBubble
               key={message.id}
@@ -689,19 +699,6 @@ export default function JournalSessionPage() {
             }}
           />
           <div className="absolute right-1 xs:right-1.5 sm:right-2 top-1/2 -translate-y-1/2 flex gap-0.5 sm:gap-1">
-            {/* Placeholder for Image Icon
-            <Button 
-              type="button" 
-              variant="ghost" 
-              size="icon" 
-              className="text-muted-foreground hover:text-primary h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9"
-              // onClick={() => setIsImagePromptOpen(true)} // If re-implementing image prompt
-              onClick={() => toast({ title: "Feature Coming Soon!", description: "Image prompts will be available later."})}
-            >
-              <ImageIcon className="h-3.5 w-3.5 xs:h-4 xs:w-4 sm:h-5 sm:w-5" />
-              <span className="sr-only">Visual Prompt</span>
-            </Button>
-            */}
              <Button 
               type="button" 
               variant="ghost" 
