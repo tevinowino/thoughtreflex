@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth, UserProfile } from '@/contexts/auth-context';
-import { UserCircle, Bell, Palette, ShieldCheck, LogOut, Brain, Zap, Smile, Image as ImageIcon, UserSquare2, Trash2, Loader2, TestTube2 } from 'lucide-react';
+import { UserCircle, Bell, Palette, ShieldCheck, LogOut, Brain, Zap, Smile, Image as ImageIcon, UserSquare2, Trash2, Loader2, TestTube2, DownloadCloud } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -35,25 +35,27 @@ import {
   DialogDescription as ReauthDialogDescription,
   DialogFooter as ReauthDialogFooter,
 } from "@/components/ui/dialog";
-import { EmailAuthProvider, GoogleAuthProvider, reauthenticateWithPopup, reauthenticateWithCredential } from 'firebase/auth';
+import { EmailAuthProvider, GoogleAuthProvider, reauthenticateWithPopup, reauthenticateWithCredential, signOut as firebaseSignOut } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, writeBatch, deleteDoc as deleteFirestoreDoc } from 'firebase/firestore';
+import type { GenerateDailyTopicContentOutput } from '@/ai/core/daily-topic-content-schemas';
+import InstallPWAButton from '@/components/app/install-pwa-button';
 
 
 type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
 
 const avatarOptions = [
-  { id: 'avatar1', name: 'Character 1', url: '/avatars/blue.png' },
-  { id: 'avatar2', name: 'Character 2', url: '/avatars/explorer.png' },
-  { id: 'avatar3', name: 'Character 3', url: '/avatars/lily.png' },
-  { id: 'avatar4', name: 'Character 4', url: '/avatars/rex.png' },
-  { id: 'avatar5', name: 'Character 5', url: '/avatars/violet.png' },
-  { id: 'no_avatar', name: 'No Avatar', url: ''}
+  { id: 'avatar1', name: 'Azure', url: '/avatars/blue.png', hint: "abstract blue" },
+  { id: 'avatar2', name: 'Explorer', url: '/avatars/explorer.png', hint: "adventurer person" },
+  { id: 'avatar3', name: 'Lily', url: '/avatars/lily.png', hint: "woman nature" },
+  { id: 'avatar4', name: 'Rex', url: '/avatars/rex.png', hint: "dinosaur green" },
+  { id: 'avatar5', name: 'Violet', url: '/avatars/violet.png', hint: "purple nebula" },
+  { id: 'no_avatar', name: 'No Avatar', url: '', hint: "user icon" }
 ];
 
 
 export default function SettingsPage() {
-  const { user, signOut, updateUserProfile, loading: authLoading, deleteUserData, error: authError } = useAuth();
+  const { user, signOut: contextSignOut, updateUserProfile, loading: authLoading, deleteUserData, error: authError, refreshUserProfile } = useAuth();
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
 
@@ -143,10 +145,10 @@ export default function SettingsPage() {
     );
 
     if (isEmailProvider) {
-      setIsPasswordPromptOpen(true);
-    } else {
+      setIsPasswordPromptOpen(true); // Open password prompt for email users
+    } else { // For OAuth providers like Google
       try {
-        const provider = new GoogleAuthProvider(); 
+        const provider = new GoogleAuthProvider(); // Or other providers
         await reauthenticateWithPopup(auth.currentUser, provider);
         await handleFinalDelete(); 
       } catch (reauthError: any) {
@@ -156,7 +158,7 @@ export default function SettingsPage() {
           description: reauthError.message || "Could not re-authenticate. Please try again.",
           variant: "destructive",
         });
-        setIsDeleteConfirmationOpen(false); 
+        setIsDeleteConfirmationOpen(false); // Close main confirmation dialog
       }
     }
   };
@@ -169,7 +171,7 @@ export default function SettingsPage() {
     }
 
     setIsDeletingData(true);
-    setIsPasswordPromptOpen(false); 
+    setIsPasswordPromptOpen(false); // Close password prompt if open
 
     try {
       if (auth.currentUser.providerData.some(p => p.providerId === EmailAuthProvider.PROVIDER_ID) && passwordForDelete) {
@@ -182,18 +184,21 @@ export default function SettingsPage() {
         title: "Data Deleted Successfully",
         description: "All your personal data has been removed. Your profile has been reset.",
       });
-      // Refresh user state to reflect reset profile (e.g., MBTI type removed)
-      if (user) { // Re-fetch user to get the newly initialized profile
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) setUser(userDocSnap.data() as UserProfile);
-      }
+      // Refresh user state to reflect reset profile
+      if(refreshUserProfile) await refreshUserProfile();
+      // Optionally, re-initialize local state if needed or let useEffect(user) handle it
+      setDisplayName(user.displayName || ''); // Or new default
+      setDefaultTherapistMode('Therapist');
+      setSelectedAvatarUrl('');
+      setCurrentMbtiType('Not Set');
+
 
     } catch (error: any) {
       console.error("Data deletion error:", error);
        let description = error.message || "Could not delete your data.";
        if (error.code === 'auth/wrong-password') {
         description = "Incorrect password. Data deletion cancelled.";
+        setIsPasswordPromptOpen(true); // Re-open password prompt on wrong password
       } else if (error.code === 'auth/requires-recent-login' || error.code === 'auth/user-token-expired') {
         description = "Your session has expired. Please log out and log back in to perform this action.";
       }
@@ -219,7 +224,7 @@ export default function SettingsPage() {
   if (authLoading && !user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     );
   }
@@ -242,11 +247,11 @@ export default function SettingsPage() {
         <CardContent className="space-y-4 p-4 sm:p-6">
           <div className="space-y-1">
             <Label htmlFor="displayName" className="text-sm">Display Name</Label>
-            <Input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="text-sm sm:text-base"/>
+            <Input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="text-sm sm:text-base bg-muted/30"/>
           </div>
           <div className="space-y-1">
             <Label htmlFor="email" className="text-sm">Email</Label>
-            <Input id="email" value={email} disabled readOnly  className="text-sm sm:text-base"/>
+            <Input id="email" value={email} disabled readOnly  className="text-sm sm:text-base bg-muted/30"/>
             <p className="text-xs text-muted-foreground">Email cannot be changed here.</p>
           </div>
         </CardContent>
@@ -276,6 +281,7 @@ export default function SettingsPage() {
                         width={64} 
                         height={64} 
                         className="rounded-full object-cover w-12 h-12 sm:w-16 sm:h-16"
+                        data-ai-hint={avatar.hint}
                     />
                 ) : (
                     <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-secondary flex items-center justify-center">
@@ -302,7 +308,7 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground">Choose your preferred AI interaction style.</p>
             </div>
             <Select value={defaultTherapistMode} onValueChange={(value: TherapistMode) => setDefaultTherapistMode(value)}>
-              <SelectTrigger className="w-[150px] sm:w-[180px] text-sm">
+              <SelectTrigger className="w-[150px] sm:w-[180px] text-sm bg-muted/30">
                  <div className="flex items-center">
                     {modeIcons[defaultTherapistMode]}
                     <SelectValue placeholder="Select Mode" />
@@ -347,7 +353,7 @@ export default function SettingsPage() {
           <p className="text-sm text-foreground/90">
             Your current MBTI type: <span className="font-semibold text-primary">{currentMbtiType}</span>
           </p>
-          <Button variant="outline" asChild className="w-full sm:w-auto justify-center">
+          <Button variant="outline" asChild className="w-full sm:w-auto justify-center shadow-sm">
             <Link href="/personality-test">
               {user?.mbtiType ? 'Change My MBTI Type' : 'Record My MBTI Type'}
             </Link>
@@ -358,9 +364,19 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      <Card className="shadow-lg rounded-xl sm:rounded-2xl">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl"><DownloadCloud className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> App Installation</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">Install ThoughtReflex on your device for a more app-like experience.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 sm:p-6">
+          <InstallPWAButton />
+        </CardContent>
+      </Card>
+
 
        <div className="flex justify-end pt-2">
-         <Button onClick={handleSaveChanges} disabled={isSaving || authLoading} className="text-sm sm:text-base">
+         <Button onClick={handleSaveChanges} disabled={isSaving || authLoading} className="text-sm sm:text-base shadow-md">
             {isSaving ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : null}
             {isSaving ? 'Saving...' : 'Save All Changes'}
           </Button>
@@ -372,16 +388,16 @@ export default function SettingsPage() {
           <CardTitle className="flex items-center gap-2 text-lg sm:text-xl"><ShieldCheck className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Account & Security</CardTitle>
           <CardDescription className="text-xs sm:text-sm">Manage your account security and data.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2 sm:space-y-3 p-4 sm:p-6">
-            <Button variant="outline" asChild className="w-full sm:w-auto justify-center">
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 sm:p-6">
+            <Button variant="outline" asChild className="w-full justify-center shadow-sm">
                 <Link href="/settings/change-password">Change Password</Link>
             </Button>
-            <Button variant="outline" asChild className="w-full sm:w-auto justify-center">
+            <Button variant="outline" asChild className="w-full justify-center shadow-sm">
                 <Link href="/settings/export-data">Export My Data</Link>
             </Button>
             <AlertDialog open={isDeleteConfirmationOpen} onOpenChange={setIsDeleteConfirmationOpen}>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive" className={cn("w-full sm:w-auto justify-center")} onClick={() => setIsDeleteConfirmationOpen(true)}>
+                <Button variant="destructive" className={cn("w-full justify-center shadow-sm", buttonVariants({variant: "destructive"}))} onClick={() => setIsDeleteConfirmationOpen(true)}>
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete My Data
                 </Button>
@@ -390,7 +406,7 @@ export default function SettingsPage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete All Your Personal Data?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This action will permanently delete all your personal data within ThoughtReflex, including journals, goals, and recaps.
+                    This action will permanently delete all your personal data within ThoughtReflex, including journals, goals, recaps, mind shifts, and mood logs.
                     Your login account will remain active, allowing you to start fresh. This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
@@ -407,7 +423,7 @@ export default function SettingsPage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-            <Button variant="outline" onClick={signOut} className="w-full sm:w-auto justify-center">
+            <Button variant="outline" onClick={() => { contextSignOut().catch(err => toast({ title: "Sign Out Error", description: err.message, variant: "destructive"})); }} className="w-full justify-center shadow-sm">
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign Out
             </Button>
@@ -429,8 +445,9 @@ export default function SettingsPage() {
                                 value={passwordForDelete}
                                 onChange={(e) => setPasswordForDelete(e.target.value)}
                                 required
+                                className="bg-muted/30"
                             />
-                             {authError && authError.code === 'auth/wrong-password' && <p className="text-sm text-destructive mt-1">Incorrect password.</p>}
+                             {authError && (authError.code === 'auth/wrong-password' || authError.code === 'auth/invalid-credential') && <p className="text-sm text-destructive mt-1">Incorrect password.</p>}
                         </div>
                         <ReauthDialogFooter>
                             <Button type="button" variant="outline" onClick={() => { setIsPasswordPromptOpen(false); setPasswordForDelete('');}}>Cancel</Button>
