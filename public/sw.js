@@ -1,25 +1,46 @@
 
 // public/sw.js
 self.addEventListener('install', (event) => {
-  // console.log('ThoughtReflex Service Worker: Installing...');
-  // This event is fired when the service worker is first installed.
-  // You might pre-cache essential assets here if needed, but for a minimal setup,
-  // just ensuring it installs is enough for PWA installability.
-  self.skipWaiting(); // Ensures the new service worker activates immediately
+  console.log('ThoughtReflex Service Worker: Installing...');
+  // Add caching strategies here if needed in the future
+  // For now, just activate
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', (event) => {
-  // console.log('ThoughtReflex Service Worker: Activating...');
-  // This event is fired when the service worker is activated.
-  // It's a good place to clean up old caches.
-  event.waitUntil(self.clients.claim()); // Ensures the SW takes control of clients without a page reload
+  console.log('ThoughtReflex Service Worker: Activating...');
+  // Claim clients immediately
+  event.waitUntil(self.clients.claim());
 });
 
 self.addEventListener('fetch', (event) => {
-  // console.log('ThoughtReflex Service Worker: Fetching ', event.request.url);
-  // For a minimal PWA setup focused on installability, we don't need complex caching.
-  // Next.js handles its own caching for JS/CSS chunks.
-  // If you want offline capabilities, you'd implement caching strategies here.
-  // For now, just let the browser handle the fetch as usual.
-  return;
+  // Basic pass-through fetch handler.
+  // Next.js handles most caching. For more advanced offline, this needs expansion.
+  // event.respondWith(fetch(event.request));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  console.log('ThoughtReflex Service Worker: Notification clicked.');
+  event.notification.close();
+
+  const urlToOpen = event.notification.data?.url || '/dashboard';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      if (clientList.length > 0) {
+        let client = clientList[0];
+        for (let i = 0; i < clientList.length; i++) {
+          if (clientList[i].focused) {
+            client = clientList[i];
+          }
+        }
+        return client.focus().then(client => client.navigate(urlToOpen));
+      }
+      return clients.openWindow(urlToOpen);
+    })
+  );
+});
+
+self.addEventListener('notificationclose', (event) => {
+  console.log('ThoughtReflex Service Worker: Notification closed.', event.notification);
 });

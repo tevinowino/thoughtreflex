@@ -7,7 +7,8 @@ import './globals.css';
 import { AuthProvider } from '@/contexts/auth-context';
 import { Toaster } from '@/components/ui/toaster';
 import { ThemeProvider } from '@/components/theme-provider';
-import ServiceWorkerRegistrar from '@/components/app/service-worker-registrar'; // New component
+import ServiceWorkerRegistrar from '@/components/app/service-worker-registrar';
+import NotificationManager from '@/components/app/notification-manager'; // Import NotificationManager
 
 const inter = Inter({
   subsets: ['latin'],
@@ -52,7 +53,8 @@ export default function RootLayout({
           <AuthProvider>
             {children}
             <Toaster />
-            <ServiceWorkerRegistrar /> {/* Add the client component here */}
+            <ServiceWorkerRegistrar />
+            <NotificationManager /> {/* Add NotificationManager here */}
           </AuthProvider>
         </ThemeProvider>
       </body>

@@ -1,3 +1,4 @@
+
 // src/contexts/auth-context.tsx
 'use client';
 
@@ -15,11 +16,11 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
   reauthenticateWithPopup,
-  deleteUser,
+  // deleteUser, // Not used if we only delete data
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc, Timestamp, collection, getDocs, writeBatch, deleteDoc as deleteFirestoreDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
-import type { GenerateDailyTopicContentOutput } from '@/ai/core/daily-topic-content-schemas'; // For daily generated topics
+import type { GenerateDailyTopicContentOutput, DailyTopicUserAnswers } from '@/ai/core/daily-topic-content-schemas';
 
 export interface UserProfile {
   uid: string;
@@ -41,18 +42,15 @@ export interface UserProfile {
       lastDetected: Timestamp;
     };
   } | null;
-  dailyGeneratedTopics?: { // Stores AI-generated topic content for each day
-    [date: string]: GenerateDailyTopicContentOutput & { // YYYY-MM-DD
+  dailyGeneratedTopics?: {
+    [date: string]: GenerateDailyTopicContentOutput & {
       completed?: boolean;
-      userAnswers?: { // Store user's actual responses to this specific generated topic
-        scores: number[];
-        userEntry?: string;
-        completedAt: Timestamp;
-      };
+      userAnswers?: DailyTopicUserAnswers; // Using the more specific type
     };
   } | null;
-  lastDailyTopicCompletionDate?: string; // YYYY-MM-DD // Tracks if user completed any topic on this date
-  // Old dailyTopicUserAnswers is effectively merged into dailyGeneratedTopics.userAnswers
+  lastDailyTopicCompletionDate?: string | null; // YYYY-MM-DD
+  milestonesAchieved?: number[]; // e.g., [3, 7, 14, 30] for streaks
+  lastCompassionCheckInDate?: string | null; // YYYY-MM-DD
 }
 
 
@@ -77,42 +75,46 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [error, setError] = useState<AuthError | null>(null);
   const router = useRouter();
 
+  const defaultUserProfileValues: Omit<UserProfile, 'uid' | 'email' | 'displayName' | 'photoURL'> = {
+    defaultTherapistMode: 'Therapist',
+    currentStreak: 0,
+    longestStreak: 0,
+    lastJournalDate: '',
+    mbtiType: null,
+    latestMood: null,
+    detectedIssues: null,
+    dailyGeneratedTopics: null,
+    lastDailyTopicCompletionDate: null,
+    milestonesAchieved: [],
+    lastCompassionCheckInDate: null,
+  };
+
   const fetchAndSetUser = async (firebaseUser: FirebaseUser) => {
     const userDocRef = doc(db, 'users', firebaseUser.uid);
     const userDocSnap = await getDoc(userDocRef);
     if (userDocSnap.exists()) {
       const profileData = userDocSnap.data();
       setUser({
-        uid: firebaseUser.uid, // Always ensure uid is from auth
+        ...defaultUserProfileValues, // Ensure all fields have defaults
+        ...profileData, // Spread existing data first
+        uid: firebaseUser.uid,
         email: firebaseUser.email || profileData.email || null,
         displayName: firebaseUser.displayName || profileData.displayName || null,
         photoURL: firebaseUser.photoURL || profileData.photoURL || null,
-        defaultTherapistMode: profileData.defaultTherapistMode || 'Therapist',
-        currentStreak: profileData.currentStreak || 0,
-        longestStreak: profileData.longestStreak || 0,
-        lastJournalDate: profileData.lastJournalDate || '',
-        mbtiType: profileData.mbtiType || null,
-        latestMood: profileData.latestMood || null,
+        // Ensure nested objects are properly defaulted if missing
         detectedIssues: profileData.detectedIssues || null,
         dailyGeneratedTopics: profileData.dailyGeneratedTopics || null,
-        lastDailyTopicCompletionDate: profileData.lastDailyTopicCompletionDate || null,
+        latestMood: profileData.latestMood || null,
+        milestonesAchieved: profileData.milestonesAchieved || [],
       } as UserProfile);
     } else {
       // New user profile creation
       const newUserProfile: UserProfile = {
         uid: firebaseUser.uid,
         email: firebaseUser.email || null,
-        displayName: firebaseUser.displayName || null,
-        photoURL: firebaseUser.photoURL || null,
-        defaultTherapistMode: 'Therapist',
-        currentStreak: 0,
-        longestStreak: 0,
-        lastJournalDate: '',
-        mbtiType: null,
-        latestMood: null,
-        detectedIssues: null,
-        dailyGeneratedTopics: null,
-        lastDailyTopicCompletionDate: null,
+        displayName: firebaseUser.displayName || 'Valued User', // Default display name
+        photoURL: firebaseUser.photoURL || null, // Default photoURL
+        ...defaultUserProfileValues,
       };
       await setDoc(userDocRef, newUserProfile, { merge: true });
       setUser(newUserProfile);
@@ -135,8 +137,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const refreshUserProfile = async () => {
     if (auth.currentUser) {
       setLoading(true);
-      await fetchAndSetUser(auth.currentUser);
-      setLoading(false);
+      try {
+        await fetchAndSetUser(auth.currentUser);
+      } catch(err) {
+        console.error("Error refreshing user profile:", err);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -145,26 +152,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const userDocSnap = await getDoc(userDocRef);
     let userProfileData: UserProfile;
 
-    const initialDisplayName = displayNameParam || firebaseUser.displayName || null;
+    const initialDisplayName = displayNameParam || firebaseUser.displayName || 'Valued User';
     const initialPhotoURL = firebaseUser.photoURL || null;
 
     if (userDocSnap.exists()) {
       const existingProfile = userDocSnap.data() as UserProfile;
       userProfileData = {
+        ...defaultUserProfileValues,
         ...existingProfile,
         uid: firebaseUser.uid, 
         email: firebaseUser.email || null,
-        displayName: initialDisplayName === undefined ? existingProfile.displayName : initialDisplayName,
-        photoURL: initialPhotoURL === undefined ? existingProfile.photoURL : initialPhotoURL,
-        defaultTherapistMode: existingProfile.defaultTherapistMode || 'Therapist',
-        currentStreak: existingProfile.currentStreak || 0,
-        longestStreak: existingProfile.longestStreak || 0,
-        lastJournalDate: existingProfile.lastJournalDate || '',
-        mbtiType: existingProfile.mbtiType === undefined ? null : existingProfile.mbtiType,
-        latestMood: existingProfile.latestMood === undefined ? null : existingProfile.latestMood,
-        detectedIssues: existingProfile.detectedIssues === undefined ? null : existingProfile.detectedIssues,
-        dailyGeneratedTopics: existingProfile.dailyGeneratedTopics === undefined ? null : existingProfile.dailyGeneratedTopics,
-        lastDailyTopicCompletionDate: existingProfile.lastDailyTopicCompletionDate === undefined ? null : existingProfile.lastDailyTopicCompletionDate,
+        displayName: initialDisplayName,
+        photoURL: initialPhotoURL,
+        milestonesAchieved: existingProfile.milestonesAchieved || [],
       };
     } else {
       userProfileData = {
@@ -172,15 +172,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         email: firebaseUser.email || null,
         displayName: initialDisplayName,
         photoURL: initialPhotoURL,
-        defaultTherapistMode: 'Therapist',
-        currentStreak: 0,
-        longestStreak: 0,
-        lastJournalDate: '',
-        mbtiType: null,
-        latestMood: null,
-        detectedIssues: null,
-        dailyGeneratedTopics: null,
-        lastDailyTopicCompletionDate: null,
+        ...defaultUserProfileValues,
       };
     }
     
@@ -196,13 +188,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         await updateFirebaseProfile(auth.currentUser, authProfileUpdates);
     }
     
-    // Ensure all undefined top-level fields are converted to null for Firestore
     const firestoreSafeUserProfileData = Object.fromEntries(
       Object.entries(userProfileData).map(([key, value]) => [key, value === undefined ? null : value])
     );
 
     await setDoc(userDocRef, firestoreSafeUserProfileData, { merge: true });
-    setUser(userProfileData); // Use the original potentially undefined values for local state
+    setUser(userProfileData); 
     setError(null);
     router.push('/dashboard');
   };
@@ -215,6 +206,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signInWithGoogle = async () => {
     setLoading(true);
+    setError(null);
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
@@ -228,6 +220,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signUpWithEmail = async (email: string, pass: string, displayName?: string) => {
     setLoading(true);
+    setError(null);
     try {
       const result = await createUserWithEmailAndPassword(auth, email, pass);
       await handleAuthSuccess(result.user, displayName);
@@ -241,6 +234,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   
   const signInWithEmail = async (email: string, pass: string) => {
     setLoading(true);
+    setError(null);
     try {
       const result = await signInWithEmailAndPassword(auth, email, pass);
       await handleAuthSuccess(result.user);
@@ -254,10 +248,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     setLoading(true);
+    setError(null);
     try {
       await firebaseSignOut(auth);
       setUser(null);
-      setError(null);
       router.push('/login'); 
     } catch (err) {
       handleAuthError(err as AuthError);
@@ -273,6 +267,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       throw noUserError;
     }
     setLoading(true);
+    setError(null);
     try {
       const userDocRef = doc(db, 'users', user.uid);
       
@@ -280,36 +275,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (details.displayName !== undefined && details.displayName !== auth.currentUser.displayName) {
         authProfileUpdates.displayName = details.displayName;
       }
-      if (details.photoURL !== undefined && details.photoURL !== auth.currentUser.photoURL) { 
+      if (details.photoURL !== undefined) { 
          authProfileUpdates.photoURL = details.photoURL === '' ? null : details.photoURL;
       }
+
 
       if (Object.keys(authProfileUpdates).length > 0) {
         await updateFirebaseProfile(auth.currentUser, authProfileUpdates);
       }
       
-      const firestoreUpdateData: Partial<UserProfile> = { ...details };
+      const firestoreUpdateData: any = { ...details };
       
-      // Convert undefined to null for Firestore compatibility
       Object.keys(firestoreUpdateData).forEach(key => {
-        const k = key as keyof UserProfile;
-        if (firestoreUpdateData[k] === undefined) {
-          delete firestoreUpdateData[k]; // Or set to null explicitly if field should exist with null
+        if (firestoreUpdateData[key] === undefined) {
+          firestoreUpdateData[key] = null; 
         }
       });
       
-      // Deep merge for dailyGeneratedTopics and detectedIssues
       if (details.dailyGeneratedTopics) {
         const currentTopics = user.dailyGeneratedTopics || {};
         firestoreUpdateData.dailyGeneratedTopics = { ...currentTopics, ...details.dailyGeneratedTopics };
-        Object.keys(firestoreUpdateData.dailyGeneratedTopics!).forEach(dateKey => {
-            if (details.dailyGeneratedTopics![dateKey]?.userAnswers) {
-                 firestoreUpdateData.dailyGeneratedTopics![dateKey].userAnswers = {
-                    ...(currentTopics[dateKey]?.userAnswers || {}),
-                    ...details.dailyGeneratedTopics![dateKey].userAnswers,
-                };
-            }
-        });
       }
       
       if (details.detectedIssues) {
@@ -322,16 +307,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           };
         }
       }
+      if (details.milestonesAchieved) {
+         firestoreUpdateData.milestonesAchieved = Array.from(new Set([...(user.milestonesAchieved || []), ...details.milestonesAchieved]));
+      }
+
 
       await updateDoc(userDocRef, firestoreUpdateData);
       
-      const updatedDocSnap = await getDoc(userDocRef);
-      if (updatedDocSnap.exists()) {
-        setUser(updatedDocSnap.data() as UserProfile);
-      } else {
-        setUser(prevUser => prevUser ? { ...prevUser, ...firestoreUpdateData } : null);
-      }
-      setError(null);
+      const updatedUser = { ...user, ...firestoreUpdateData };
+      // Ensure nested objects are merged correctly, not just replaced
+      if (details.dailyGeneratedTopics) updatedUser.dailyGeneratedTopics = firestoreUpdateData.dailyGeneratedTopics;
+      if (details.detectedIssues) updatedUser.detectedIssues = firestoreUpdateData.detectedIssues;
+      if (details.milestonesAchieved) updatedUser.milestonesAchieved = firestoreUpdateData.milestonesAchieved;
+
+
+      setUser(updatedUser);
     } catch (err) {
       handleAuthError(err as AuthError);
       throw err; 
@@ -365,7 +355,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       const batch = writeBatch(db);
-      const collectionsToDelete = ['goals', 'journalSessions', 'notebookEntries', 'weeklyRecaps', 'mindShifts', 'dailyMoods'];
+      const collectionsToDelete = ['goals', 'journalSessions', 'notebookEntries', 'weeklyRecaps', 'mindShifts', 'dailyMoods', 'dailyTopicUserAnswers']; // dailyTopicUserAnswers to be deleted
 
       for (const collName of collectionsToDelete) {
         const collRef = collection(db, 'users', user.uid, collName);
@@ -381,23 +371,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       
       const userDocRef = doc(db, 'users', user.uid);
-       // Instead of deleting the user profile doc, reset it.
       const freshUserProfileData: UserProfile = {
         uid: currentUser.uid,
         email: currentUser.email || null,
-        displayName: currentUser.displayName || null,
+        displayName: currentUser.displayName || 'Valued User',
         photoURL: currentUser.photoURL || null,
-        defaultTherapistMode: 'Therapist',
-        currentStreak: 0,
-        longestStreak: 0,
-        lastJournalDate: '',
-        mbtiType: null,
-        latestMood: null,
-        detectedIssues: null,
-        dailyGeneratedTopics: null,
-        lastDailyTopicCompletionDate: null,
+        ...defaultUserProfileValues, // Apply all defaults
       };
-      batch.set(userDocRef, freshUserProfileData); // Set overwrites the document with new data
+      batch.set(userDocRef, freshUserProfileData); 
       await batch.commit(); 
       
       setUser(freshUserProfileData);

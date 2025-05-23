@@ -7,7 +7,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Paperclip, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, Save } from 'lucide-react';
+import { ImageIcon, Send, Brain, Mic, Settings2, Smile, Zap, User, Loader2, ArrowLeft, Trash2, PlusCircle, CheckCircle, Save } from 'lucide-react';
 import { useAuth, UserProfile } from '@/contexts/auth-context'; 
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -24,7 +24,8 @@ import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Label } from '@/components/ui/label';
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, format } from 'date-fns';
+import { showLocalNotification } from '@/components/app/notification-manager';
 
 
 interface Message {
@@ -45,7 +46,7 @@ type TherapistMode = 'Therapist' | 'Coach' | 'Friend';
 const MAX_HISTORY_MESSAGES = 10; 
 
 const getISODateString = (date: Date): string => {
-  return date.toISOString().split('T')[0];
+  return format(date, 'yyyy-MM-dd');
 };
 
 export default function JournalSessionPage() {
@@ -55,7 +56,7 @@ export default function JournalSessionPage() {
   const { toast } = useToast();
   const initialSessionId = safeParams.sessionId as string;
 
-  const { user, loading: authLoading, refreshUserProfile } = useAuth();
+  const { user, loading: authLoading, updateUserProfile, refreshUserProfile } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sessionTitle, setSessionTitle] = useState('Loading session...');
@@ -85,12 +86,12 @@ export default function JournalSessionPage() {
       const newTitle = `New Journal - ${new Date().toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
       setSessionTitle(newTitle);
       setEditableSessionTitle(newTitle);
-      setIsLoadingSession(true); // Set loading while fetching AI prompt
+      setIsLoadingSession(true); 
 
       try {
         let daysSinceLastEntry: number | undefined = undefined;
         if (user.lastJournalDate) {
-          daysSinceLastEntry = differenceInDays(new Date(), new Date(user.lastJournalDate));
+          daysSinceLastEntry = differenceInDays(new Date(), parseISO(user.lastJournalDate));
         }
 
         let activeGoalText: string | undefined = undefined;
@@ -170,24 +171,26 @@ export default function JournalSessionPage() {
 
 
   const handleStreakUpdate = async () => {
-    if (!user) return;
+    if (!user || !refreshUserProfile) return;
 
     try {
+      // Fetch the most up-to-date profile to avoid race conditions with streaks
       const userDocRef = doc(db, 'users', user.uid);
       const userDocSnap = await getDoc(userDocRef);
       if (!userDocSnap.exists()) {
         console.error("User profile not found for streak update.");
         return;
       }
-      const userProfile = userDocSnap.data() as UserProfile;
+      const currentProfile = userDocSnap.data() as UserProfile;
 
       const today = new Date();
       const todayDateString = getISODateString(today);
-      const lastJournalDateString = userProfile.lastJournalDate || "";
+      const lastJournalDateString = currentProfile.lastJournalDate || "";
 
       if (lastJournalDateString !== todayDateString) {
-        let newCurrentStreak = userProfile.currentStreak || 0;
-        let newLongestStreak = userProfile.longestStreak || 0;
+        let newCurrentStreak = currentProfile.currentStreak || 0;
+        let newLongestStreak = currentProfile.longestStreak || 0;
+        let newMilestonesAchieved = currentProfile.milestonesAchieved || [];
 
         if (lastJournalDateString) {
           const yesterday = new Date(today);
@@ -207,16 +210,34 @@ export default function JournalSessionPage() {
           newLongestStreak = newCurrentStreak;
         }
 
+        const streakMilestones = [3, 7, 14, 30, 50, 100, 365]; // Define milestones
+        let milestoneReachedThisUpdate: number | null = null;
+
+        for (const milestone of streakMilestones) {
+          if (newCurrentStreak >= milestone && !newMilestonesAchieved.includes(milestone)) {
+            newMilestonesAchieved.push(milestone);
+            milestoneReachedThisUpdate = milestone; // Track the specific milestone reached
+            break; // Celebrate one milestone at a time
+          }
+        }
+
         const streakUpdates: Partial<UserProfile> = {
           currentStreak: newCurrentStreak,
           longestStreak: newLongestStreak,
           lastJournalDate: todayDateString, 
+          milestonesAchieved: newMilestonesAchieved,
         };
-        await updateDoc(userDocRef, streakUpdates);
-        if (refreshUserProfile) { 
-          await refreshUserProfile();
+        await updateUserProfile(streakUpdates); // This calls the context's updateUserProfile
+        
+        toast({ title: "Streak Updated!", description: `You're on a ${newCurrentStreak}-day streak! Keep it up! 🔥` });
+        
+        if (milestoneReachedThisUpdate) {
+            showLocalNotification("You’re Doing Amazing 💫", {
+                body: `You've journaled for ${milestoneReachedThisUpdate} days in a row! Keep showing up for yourself.`,
+                icon: '/icons/icon-192x192.png',
+                tag: `milestone-${milestoneReachedThisUpdate}`
+            });
         }
-        toast({ title: "Streak Updated!", description: `You're on a ${newCurrentStreak}-day streak!`, });
       }
     } catch (error) {
       console.error("Error updating streak:", error);
@@ -227,7 +248,7 @@ export default function JournalSessionPage() {
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || !user) return;
+    if (!input.trim() || !user || !refreshUserProfile) return;
 
     const userMessageText = input;
     setInput(''); 
@@ -275,19 +296,27 @@ export default function JournalSessionPage() {
       if (!goalsSnapshot.empty) {
           activeGoalText = goalsSnapshot.docs[0].data().text;
       }
-      
-      const historyForAI: AiChatMessage[] = messages
-        .slice(-MAX_HISTORY_MESSAGES) 
-        .map(msg => ({ sender: msg.sender, text: msg.text }));
-      historyForAI.push({ sender: 'user', text: userMessageText });
 
+      const historySnapshot = messages.slice(-MAX_HISTORY_MESSAGES -1, -1); // Get up to last 10 messages *before* current user message
+      const historyForAI: AiChatMessage[] = historySnapshot
+        .map(msg => ({ sender: msg.sender, text: msg.text }));
+      historyForAI.push({ sender: 'user', text: userMessageText }); // Add current user message
+
+      let detectedIssuesSummary: string | undefined = undefined;
+      if (user.detectedIssues && Object.keys(user.detectedIssues).length > 0) {
+          detectedIssuesSummary = "User patterns include: " + Object.entries(user.detectedIssues)
+            .map(([key, val]) => `${key} (${val.occurrences} mentions)`)
+            .join(', ') + ".";
+      }
+      
       const aiFlowInput: TherapistModeInput = {
         userInput: userMessageText,
         mode: currentTherapistMode,
         goal: activeGoalText,
         messageHistory: historyForAI,
-        mbtiType: user?.mbtiType || undefined, // Pass undefined if null
+        mbtiType: user?.mbtiType || undefined,
         userName: user.displayName || undefined,
+        detectedIssuesSummary: detectedIssuesSummary,
       };
 
       const aiResponse = await getTherapistResponse(aiFlowInput);
@@ -305,15 +334,33 @@ export default function JournalSessionPage() {
       };
       await addDoc(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), aiMessageData);
 
+      if (aiResponse.detectedIssueTags && aiResponse.detectedIssueTags.length > 0 && refreshUserProfile) {
+        const currentDetectedIssues = user.detectedIssues || {};
+        const newDetectedIssues = { ...currentDetectedIssues };
+        let issuesUpdated = false;
+        aiResponse.detectedIssueTags.forEach(tag => {
+          newDetectedIssues[tag] = {
+            occurrences: (currentDetectedIssues[tag]?.occurrences || 0) + 1,
+            lastDetected: Timestamp.now(),
+          };
+          issuesUpdated = true;
+        });
+        if (issuesUpdated) {
+          await updateUserProfile({ detectedIssues: newDetectedIssues });
+        }
+      }
+
+
       const sessionUpdateData: { lastUpdatedAt: any, firstMessagePreview?: string } = {
         lastUpdatedAt: serverTimestamp(),
       };
-      // Update firstMessagePreview if this is the very first user message in the session
-      if (messages.filter(m => m.sender === 'user').length <=1) { // includes the one being added
+      const currentSessionMessages = await getDocs(query(collection(db, 'users', user.uid, 'journalSessions', actualSessionId!, 'messages'), where('sender', '==', 'user'), orderBy('timestamp', 'asc'), limit(1)));
+      if (currentSessionMessages.docs.length === 1 && currentSessionMessages.docs[0].id === userMsgRef.id) {
           sessionUpdateData.firstMessagePreview = userMessageText.substring(0, 100);
       }
 
       await updateDoc(doc(db, 'users', user.uid, 'journalSessions', actualSessionId!), sessionUpdateData);
+      if (refreshUserProfile) await refreshUserProfile();
 
     } catch (error: any) {
       console.error("Error sending message or getting AI response:", error);
@@ -327,9 +374,8 @@ export default function JournalSessionPage() {
 
   const handleSaveSessionTitle = async () => {
     if (!currentDbSessionId || !user || !editableSessionTitle.trim()) {
-       // Allow saving if title is deliberately cleared to empty, but only if it's an existing session
       if (currentDbSessionId && editableSessionTitle.trim() === '') {
-        // Proceed to save empty title
+        // Allow saving empty title
       } else {
         toast({ title: "Error", description: "Cannot save empty title for a new session or session not found.", variant: "destructive" });
         return;
@@ -339,9 +385,9 @@ export default function JournalSessionPage() {
       const sessionDocRef = doc(db, 'users', user.uid, 'journalSessions', currentDbSessionId);
       await updateDoc(sessionDocRef, { 
         title: editableSessionTitle.trim(),
-        lastUpdatedAt: serverTimestamp() // Update lastUpdatedAt on title change as well
+        lastUpdatedAt: serverTimestamp() 
       });
-      setSessionTitle(editableSessionTitle.trim()); // Update display title
+      setSessionTitle(editableSessionTitle.trim()); 
       toast({ title: "Session Renamed", description: "The session title has been updated." });
       setIsSessionSettingsOpen(false);
     } catch (error) {
@@ -362,14 +408,14 @@ export default function JournalSessionPage() {
       
       const messagesSnapshot = await getDocs(messagesColRef);
       const batch = writeBatch(db);
-      messagesSnapshot.forEach(docSnap => { // Renamed doc to docSnap to avoid conflict
+      messagesSnapshot.forEach(docSnap => { 
         batch.delete(docSnap.ref);
       });
       await batch.commit();
 
       await deleteDoc(sessionDocRef);
 
-      toast({ title: "Session Deleted", description: "The session and its messages have been removed." });
+      toast({ title: "Session Deleted", description: `The session titled "${sessionTitle}" and its messages have been removed.` });
       router.push('/journal');
     } catch (error) {
       console.error("Error deleting session:", error);
@@ -487,7 +533,6 @@ export default function JournalSessionPage() {
             </p>
           </div>
   
-          {/* Goal suggestion component */}
           {!isUserMessage && message.suggestedGoalText && (
             <motion.div 
               initial={{ opacity: 0, height: 0 }}
@@ -514,7 +559,6 @@ export default function JournalSessionPage() {
             </motion.div>
           )}
   
-          {/* Mind shift suggestion component */}
           {!isUserMessage && message.reframingData && (
             <motion.div 
               initial={{ opacity: 0, height: 0 }}
@@ -570,7 +614,6 @@ export default function JournalSessionPage() {
         </div>
         
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          {/* Therapist Mode Selector */}
           <Select value={currentTherapistMode} onValueChange={(value: TherapistMode) => setCurrentTherapistMode(value)}>
             <SelectTrigger className="w-[100px] xs:w-[110px] sm:w-[150px] h-8 sm:h-9 text-xs sm:text-sm shadow-sm">
               <div className="flex items-center">
@@ -599,7 +642,6 @@ export default function JournalSessionPage() {
             </SelectContent>
           </Select>
           
-          {/* Settings Dialog */}
           <Dialog open={isSessionSettingsOpen} onOpenChange={setIsSessionSettingsOpen}>
             <DialogTrigger asChild>
               <Button 
@@ -685,7 +727,6 @@ export default function JournalSessionPage() {
         </div>
       </CardHeader>
 
-      {/* Chat Messages Area */}
       <ScrollArea className="flex-1" viewportRef={viewportRef} ref={scrollAreaRef}>
         <div className="p-3 xs:p-4">
           {messages.map((message) => (
@@ -697,7 +738,6 @@ export default function JournalSessionPage() {
             />
           ))}
           
-          {/* Loading Animation */}
           {isLoadingAiResponse && (
             <motion.div 
               initial={{ opacity: 0 }}
@@ -735,7 +775,6 @@ export default function JournalSessionPage() {
         </div>
       </ScrollArea>
 
-      {/* Message Input Area */}
       <form onSubmit={handleSendMessage} className="border-t p-2 xs:p-3 bg-muted/30">
         <div className="relative flex items-center">
           <Textarea
@@ -752,6 +791,17 @@ export default function JournalSessionPage() {
             }}
           />
           <div className="absolute right-1 xs:right-1.5 sm:right-2 top-1/2 -translate-y-1/2 flex gap-0.5 sm:gap-1">
+             <Dialog> {/* Placeholder for Image Prompt Dialog - Not implemented in this step */}
+              <DialogTrigger asChild>
+                <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-primary h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9"
+                 onClick={() => toast({ title: "Feature Coming Soon!", description: "AI Visual Prompts will be available later."})}
+                >
+                  <ImageIcon className="h-3.5 w-3.5 xs:h-4 xs:w-4 sm:h-5 sm:w-5" />
+                  <span className="sr-only">Visual Prompt</span>
+                </Button>
+              </DialogTrigger>
+              {/* <DialogContent> ... </DialogContent> */}
+            </Dialog>
             <Button 
               type="button" 
               variant="ghost" 
