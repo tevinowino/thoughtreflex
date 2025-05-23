@@ -15,10 +15,11 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '@/contexts/auth-context';
-import { Brain, LayoutDashboard, LogOut, Settings, UserCircle, Menu, Star, Edit3, HelpCircle, Flame } from 'lucide-react';
+import { Brain, LayoutDashboard, LogOut, Settings, UserCircle, Menu, Star, Edit3, HelpCircle, Flame, DownloadCloud } from 'lucide-react';
 import { useSidebar } from '@/components/ui/sidebar';
 import { ModeToggle } from '@/components/mode-toggle';
 import { cn } from '@/lib/utils';
+import InstallPWAButton from './install-pwa-button'; // Import the InstallPWAButton
 
 export function AppHeader() {
   const { user, signOut, loading } = useAuth();
@@ -36,9 +37,9 @@ export function AppHeader() {
   let flameAnimationClass = '';
 
   if (currentStreak === 0) {
-    flameColorClass = 'text-muted-foreground/60'; // More muted for 0
+    flameColorClass = 'text-muted-foreground/60'; 
   } else if (currentStreak >= 1 && currentStreak <= 9) {
-    flameColorClass = 'text-primary/80'; // Slightly less intense primary for early days
+    flameColorClass = 'text-primary/80'; 
   } else if (currentStreak >= 10 && currentStreak <= 19) {
     flameColorClass = 'text-red-500 dark:text-red-400';
   } else if (currentStreak >= 20 && currentStreak <= 99) {
@@ -83,10 +84,8 @@ export function AppHeader() {
                     <span
                       className={cn(
                         "absolute top-1/2 left-2 -translate-x-1/2 -translate-y-[55%] text-[9px] sm:text-[10px] font-bold text-white",
-                        "drop-shadow-[0_0.8px_0.8px_rgba(0,0,0,0.6)] dark:drop-shadow-[0_0.8px_0.8px_rgba(0,0,0,0.9)]" // Text shadow for legibility
+                        "drop-shadow-[0_0.8px_0.8px_rgba(0,0,0,0.6)] dark:drop-shadow-[0_0.8px_0.8px_rgba(0,0,0,0.9)]"
                       )}
-                      // To ensure text is readable, consider a background for the number if shadow isn't enough.
-                      // Or adjust text color based on flameColorClass. For now, white with shadow.
                     >
                       {currentStreak}
                     </span>
@@ -100,6 +99,12 @@ export function AppHeader() {
             </Tooltip>
           </TooltipProvider>
         )}
+
+        {/* PWA Install Button in Header */}
+        <div className="hidden sm:flex"> {/* Hide on very small screens if it gets too cluttered */}
+            <InstallPWAButton />
+        </div>
+
 
         <ModeToggle />
         {user && !loading ? (
@@ -137,7 +142,7 @@ export function AppHeader() {
                 <span className="opacity-50 flex items-center w-full"><HelpCircle className="mr-2 h-4 w-4 text-muted-foreground" /> Help / FAQ</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={signOut} className="text-red-600 dark:text-red-400 focus:bg-red-500/10 focus:text-red-700 dark:focus:text-red-300 cursor-pointer">
+              <DropdownMenuItem onClick={() => { signOut().catch(err => console.error("Sign out error:", err)); }} className="text-red-600 dark:text-red-400 focus:bg-red-500/10 focus:text-red-700 dark:focus:text-red-300 cursor-pointer">
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign Out
               </DropdownMenuItem>
@@ -154,4 +159,3 @@ export function AppHeader() {
     </header>
   );
 }
-
